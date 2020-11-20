@@ -9,16 +9,14 @@ class VRP:
                  vehicle_capacity=30, x_range=10, y_range=10, number_of_customers=None, demand_lower=1, demand_higher=3,
                  seed=420):
         if seed is not None:
-            self.rnd = np.random.seed(seed)
-        else:
-            self.rnd = np.random
+            np.random.seed(seed)
 
         self.Q = vehicle_capacity
         self.n = number_of_nodes
         self.x_range = x_range
         self.y_range = y_range
         if number_of_customers is None:
-            self.number_of_customers = number_of_nodes
+            self.number_of_customers = number_of_nodes - 1
         else:
             self.number_of_customers = number_of_customers
         self.demand_range = [demand_lower, demand_higher]
@@ -34,12 +32,18 @@ class VRP:
         self.model = None
         self.x = None
         self.u = None
+
+        self.create_dataset()
+        print("setup")
+        self.setup()
+        print("done")
     
     def create_dataset(self):
         # If data sheet does not exist, generate one
         self.generate_node_table()
         self.create_customers()
         self.create_arcs()
+
 
     def load_dataset(self):
         # TODO
@@ -84,8 +88,8 @@ class VRP:
         return dist
 
     def generate_node_table(self, file_name="nodes.csv"):
-        nodes_coord_x = self.rnd.rand(self.n) * self.x_range
-        nodes_coord_y = self.rnd.rand(self.n) * self.y_range
+        nodes_coord_x = np.random.rand(self.n) * self.x_range
+        nodes_coord_y = np.random.rand(self.n) * self.y_range
         nodes_table = pd.DataFrame(np.transpose(np.array([nodes_coord_x, nodes_coord_y])),
                                    columns=['x_coord', 'y_coord'])
         nodes_table.to_csv(file_name)
@@ -100,19 +104,19 @@ class VRP:
     def create_customers(self):
         random_selection = list(self.nodes.sample(n=self.number_of_customers + 1).index)
         # Select the depot node
-        self.V = random_selection.pop(self.rnd.random_integers(min(random_selection),
-                                                               max(random_selection) + 1,
-                                                               size=1))
+        self.V = random_selection.pop(int(np.random.random_integers(0, len(random_selection)-1, size=1)))
         self.N = random_selection  # The rest will be the customer nodes
-        self.V = self.V + self.N
-
+        temp_list = self.N[:]
+        temp_list.append(self.V)
+        self.V = temp_list[:]
         # Assign the customer demand to each customer
         self.q = {}
         for i in self.N:
-            self.q[i] = self.rnd.random_integers(self.demand_range[0], self.demand_range[1], size=1)
+            self.q[i] = np.random.random_integers(self.demand_range[0], self.demand_range[1], size=1)
         return
 
     def create_arcs(self):
+        print(self.V)
         self.A = [c for c in itertools.product(self.V, self.V)]
         # Remove the elements where i=j
         for i, tup in enumerate(self.A):
@@ -122,9 +126,10 @@ class VRP:
         # The cost to travel an arc equals its length
         self.c = {}
         for i, j in self.A:
-            x_i = self.nodes.at(i, 'x_coord')
-            y_i = self.nodes.at(i, 'y_coord')
-            x_j = self.nodes.at(i, 'x_coord')
-            y_j = self.nodes.at(i, 'y_coord')
+            x_i = self.nodes.get('x_coord')[i]
+            y_i = self.nodes.get('y_coord')[i]
+            x_j = self.nodes.get('x_coord')[j]
+            y_j = self.nodes.get('y_coord')[j]
             self.c[(i, j)] = self.calc_distance((x_i, y_i), (x_j, y_j))
         return
+
