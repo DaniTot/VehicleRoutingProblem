@@ -44,7 +44,6 @@ class VRP:
         self.create_customers()
         self.create_arcs()
 
-
     def load_dataset(self):
         # TODO
         return
@@ -53,29 +52,63 @@ class VRP:
         self.model = Model('CVRP')
 
         # Variables
-        self.x = self.model.addVars(self.A, vtype=GRB.BINARY)
-        self.u = self.model.addVars(self.N, vtype=GRB.CONTINUOUS)
+        # self.x = self.model.addVars(self.A, vtype=GRB.BINARY)
+        # self.u = self.model.addVars(self.N, vtype=GRB.CONTINUOUS)
+        self.x = {}
+        for i, j in self.A:
+            for k in self.K:
+                self.x[i, j, k] = self.model.addVar(lb=0, ub=1, vtype=GRB.BINARY, name=f"x[{i}, {j}, {k}]")
+        # TODO: Not sure if this below is needed
+        # self.u = {}
+        # for j in self.N:
+        #         self.u[j] = self.model.addVar(vtype=GRB.CONTINUOUS, name=f"u[{j}]")
+        # Make sure there are no duplicates of i,j,k combination in x
+        assert len(self.x) == len(set(self.x.keys()))
+        assert len(self.u) == len(set(self.u.keys()))
         self.model.update()
 
         # Objective function
-        # TODO: Alter obj. func. for multiple vehicles
-        self.model.setObjective(quicksum(self.x[i, j]*self.c[i, j] for i, j in self.A), sense=GRB.MINIMIZE)
+        # explanation for self.V[:-1] = [0, 1, ..., n]
+        # explanation for self.V[1:] = [1, ..., n, n+1]
+        self.model.setObjective(quicksum(self.x[i, j, k]*self.c[i, j] for i in self.V[:-1] for j in self.V[1:]
+                                         for k in self.K),
+                                sense=GRB.MINIMIZE)
         self.model.update()
 
         # Constraints
+        # Each vehicle must leave the depot
+        for k in self.K:
+            self.model.addConstr(quicksum(self.x[0, j, k] for j in self.V[1:]) == 1, name=f"Start_{k}")
+        # Each vehicle must return to depot
+        for k in self.K:
+            self.model.addConstr(quicksum(self.x[j, 0, k] for j in self.V[:-1]) == 1, name=f"Finish_{k}")
+        # Each customer must be visited by one vehicle
         for i in self.N:
-            self.model.addConstr(quicksum(self.x[i, j] for j in self.V if i != j) == 1, name=f"Constr1_{i}")
-        for j in self.N:
-            self.model.addConstr(quicksum(self.x[i, j] for i in self.V if j != i) == 1, name=f"Constr2_{j}")
-        for i, j in itertools.product(self.A, self.A):
-            if i != 0 and j != 0:
-                self.model.addConstr((self.x[i, j] == 1) >> (self.u[i] + self.q[i] == self.u[j]),
-                                     name=f"Constr3_{i}{j}")
+            self.model.addConstr(quicksum(self.x[i, j, k] for k in self.K for j in self.V[:-1] if i != j) == 1,
+                                 name=f"Visit_{i}")
+        # If a vehicle visits a customer, it must also leave that customer
         for i in self.N:
-            self.model.addConstr(self.q[i] <= self.u[i], name=f"Constr4_{i}")
-            self.model.addConstr(self.u[i] <= self.Q, name=f"Constr5_{i}")
+            for k in self.K:
+                self.model.addConstr(quicksum(self.x[j, j, k] for j in self.V[:-1] if i != j) -
+                                     quicksum(self.x[i, j, k] for j in self.V[1:] if i != j) == 0,
+                                     name=f"Leave_{i}{k}")
+        # Capacity constraint
+        for k in self.K:
+            self.model.addConstr(quicksum(self.q[j] * self.x[i, j, k]
+                                          for i in self.V for j in self.N if i != j) <= self.Q,
+                                 name=f"Capacity_{k}")
 
-        # TODO: multiple vehicle constraint
+        # TODO: I'm not sure if we need these, these might have been completely replaced by the constraint above
+        # for i, j in itertools.product(self.A, self.A):
+        #     if i != 0 and j != 0:
+        #         self.model.addConstr((self.x[i, j] == 1) >> (self.u[i] + self.q[i] == self.u[j]),
+        #                              name=f"Constr3_{i}{j}")
+        # for i in self.N:
+        #     self.model.addConstr(self.q[i] <= self.u[i], name=f"Constr4_{i}")
+        #     self.model.addConstr(self.u[i] <= self.Q, name=f"Constr5_{i}")
+
+        # TODO: Sub-tour elimination
+
         self.model.update()
 
         return
@@ -104,11 +137,22 @@ class VRP:
     def create_customers(self):
         random_selection = list(self.nodes.sample(n=self.number_of_customers + 1).index)
         # Select the depot node
-        self.V = random_selection.pop(int(np.random.random_integers(0, len(random_selection)-1, size=1)))
+        # Depot node is randomly selected
+        start_depot_idx = random_selection.pop(int(np.random.random_integers(0, len(random_selection)-1, size=1)))
+
+        # Add a new end depot node to the end of nodes, which has the same coordinates as the start depot
+        end_depot_coord = list(self.nodes.iloc[start_depot_idx])
+        self.nodes = self.nodes.append(pd.DataFrame([end_depot_coord], columns=['x_coord', 'y_coord']),
+                                       ignore_index=True)
+        end_depot_idx = self.nodes.index[-1]
+
         self.N = random_selection  # The rest will be the customer nodes
         temp_list = self.N[:]
-        temp_list.append(self.V)
+        temp_list.insert(0, start_depot_idx)
+        temp_list.append(end_depot_idx)
+        # self.V[0] is the start depot, and self.V[-1] is the end depot
         self.V = temp_list[:]
+
         # Assign the customer demand to each customer
         self.q = {}
         for i in self.N:
@@ -116,11 +160,15 @@ class VRP:
         return
 
     def create_arcs(self):
-        print(self.V)
         self.A = [c for c in itertools.product(self.V, self.V)]
-        # Remove the elements where i=j
+
         for i, tup in enumerate(self.A):
+            # Remove the elements where i=j
             if tup[0] == tup[1]:
+                self.A.pop(i)
+            # TODO: is the following correct? is the following needed?
+            # Remove the elements that lead from the start node to the end node
+            elif (tup[0] == self.V[0] and tup[1] == self.V[-1]) or (tup[0] == self.V[-1] and tup[1] == self.V[0]):
                 self.A.pop(i)
 
         # The cost to travel an arc equals its length
@@ -133,3 +181,5 @@ class VRP:
             self.c[(i, j)] = self.calc_distance((x_i, y_i), (x_j, y_j))
         return
 
+
+vrp = VRP(20, 3)
