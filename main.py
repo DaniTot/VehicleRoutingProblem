@@ -41,13 +41,14 @@ class VRP:
         self.visualize()
 
     def visualize(self):
+        plt.title('Capacitated Vehicle Routing Problem')
         color_list = plt.cm.Set3(np.linspace(0, 12, 12))
 
-        plt.plot(np.array(self.nodes.iloc[self.V[0]])[0], np.array(self.nodes.iloc[self.V[0]])[1], c='r', marker='s',)
+        plt.plot(np.array(self.nodes.iloc[self.V[0]])[0], np.array(self.nodes.iloc[self.V[0]])[1], marker='*',markersize=20,label='Depot',c='r',)
         plt.scatter(np.array(self.nodes.iloc[self.N])[:, 0],
-                    np.array(self.nodes.iloc[self.N])[:, 1], c='b')
+                    np.array(self.nodes.iloc[self.N])[:, 1], c='b',label='Customer')
         plt.annotate([self.V[0], self.V[-1]], (self.nodes.iloc[self.V[0]][0], self.nodes.iloc[self.V[0]][1]),
-                     xytext=(20, 2), textcoords='offset points', ha='right', va='bottom')
+                     xytext=(20, -20), textcoords='offset points', ha='right', va='bottom')
         for idx in self.V[1:-1]:
             plt.annotate(idx, (self.nodes.iloc[idx][0], self.nodes.iloc[idx][1]),
                          xytext=(5, 2), textcoords='offset points', ha='right', va='bottom')
@@ -69,6 +70,7 @@ class VRP:
         print(self.V)
         print(travel_paths)
         print(self.q)
+        plt.legend(loc='lower right')
         plt.show()
 
     def create_dataset(self):
