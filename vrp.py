@@ -28,15 +28,20 @@ class VRP:
         self.x = None
         self.u = None
 
+        self.subtour_type = None
+
     def setup_random_data(self,
                           number_of_customers,
                           number_of_vehicles,
                           vehicle_capacity=5,
                           x_range=10, y_range=10,
                           demand_lower=1, demand_higher=2,
+                          subtour_type="DFJ",
                           seed=420):
         if seed is not None:
             np.random.seed(seed)
+
+        self.subtour_type = subtour_type
 
         self.Q = vehicle_capacity
         self.n = number_of_customers + 1
@@ -169,12 +174,38 @@ class VRP:
                 quicksum(self.q[j] * self.x[i, j, k] for i in self.V[:-1] for j in self.V[1:-1] if i != j) <= self.Q,
                 name=f"Capacity_{k}")
 
-        # TODO: Sub-tour elimination via Miller-Tucker-Zemlin formulation
-        for k in self.K:
-            for i, j in self.A:
-                if i not in (self.V[0], self.V[-1]) and j not in (self.V[0], self.V[-1]):
-                    self.model.addConstr(self.u[j, k] - self.u[i, k] >= self.q[j] - self.Q * (1 - self.x[i, j, k]),
-                                         name=f"Subtour_{i}_{j}_{k}")
+        # # TODO: Sub-tour elimination via Miller-Tucker-Zemlin formulation
+        # for k in self.K:
+        #     for i, j in self.A:
+        #         if i not in (self.V[0], self.V[-1]) and j not in (self.V[0], self.V[-1]):
+        #             self.model.addConstr(self.u[j, k] - self.u[i, k] >= self.q[j] - self.Q * (1 - self.x[i, j, k]),
+        #                                  name=f"Subtour_{i}_{j}_{k}")
+
+        # Subtour elimination constraint (miller-tucker-zemlin)
+        #
+        # $$u_{j} - u_{i} \geq q_{j} - Q(1-x_{ijk}), i,j = \{1,....,n\}, i \neq j$$
+
+        # Miller-Tucker-Zemlin formulation for subtour elimination
+
+        if self.subtour_type == 'MTZ':
+            for k in self.K:
+                for i, j in self.A:
+                    if i >= 1 and j >= 1:
+                        if i != self.number_of_customers + 1 and j != self.number_of_customers + 1:
+                            self.model.addConstr(self.u[j, k] - self.u[i, k] >= self.q[j] - self.Q * (1 - self.x[i, j, k]))
+
+            # Capacity constraint
+            for i in self.N:
+                for k in self.K:
+                    self.model.addConstr(self.u[i, k] >= self.q[i])
+                    self.model.addConstr(self.u[i, k] <= self.Q)
+
+        # Subtour elimination constraint (Dantzig-Fulkerson Johnson)
+        #
+        # $$\sum_{i\in S}\sum_{j \in S,j \neq i} x_{ij} \leq |S| - 1$$
+        elif self.subtour_type == 'DFJ':
+            for k in self.K:
+                self.model.addConstr(quicksum(quicksum(self.q[j] * self.x[i, j, k] for j in self.N if j != i) for i in self.V if i < self.number_of_customers + 1) <= self.Q)
 
         self.model.update()
         self.model.write("model.lp")
@@ -182,6 +213,72 @@ class VRP:
         # TODO: Set optimization limit
 
         return
+
+    def subtourelim(self, where):
+        if where == GRB.callback.MIPSOL:
+
+            active_arcs = []
+            # TODO: look into self._vars, self.cbGetSolution
+            for i, j in self.A:
+                for k in self.K:
+                    solutions = self.model.cbGetSolution(self.model._vars)
+                    if solutions[i, j, k] > 0.5:
+                        active_arcs.append([i, j, k])
+
+            active_arcs = np.vstack(active_arcs)
+
+            tours = self.subtour(active_arcs)
+
+            for k in tours.keys():
+                if len(tours[k]) > 1:
+                    for tour in tours[k]:
+                        S = np.unique(tour)
+                        expr = quicksum(self.model._vars[i, j, k] for i in S for j in S if j != i)
+                        self.model.cbLazy(expr <= len(S) - 1)
+
+    def subtour(self, active_arcs):
+        tours = {}
+
+        for k in self.K:
+            vehicle_tours = []
+            vehicle_arcs = active_arcs[np.where(active_arcs[:, 2] == k)][:, 0:2]
+            start_node, finish_node = vehicle_arcs[0]
+            if finish_node == self.V[-1]:
+                finish_node = self.V[0]
+
+            tour = [start_node, finish_node]
+            vehicle_arcs = np.delete(vehicle_arcs, [0], axis=0)
+
+            subtour_done = 0
+
+            while True:
+                while True:
+                    next_node = np.where(vehicle_arcs[:, 0] == finish_node)
+
+                    if next_node[0].size == 0:
+                        vehicle_tours.append(tour)
+                        break
+                    else:
+                        start_node, finish_node = vehicle_arcs[next_node][0]
+                        # if finish_node == V[-1]:
+                        #     finish_node = V[0]
+                        vehicle_arcs = np.delete(vehicle_arcs, next_node[0], axis=0)
+
+                        tour.append(finish_node)
+
+                if vehicle_arcs.size != 0:
+                    start_node, finish_node = vehicle_arcs[0]
+                    vehicle_arcs = np.delete(vehicle_arcs, [0], axis=0)
+
+                    # if finish_node == V[-1]:
+                    #     finish_node = V[0]
+
+                    tour = [start_node, finish_node]
+                else:
+                    tours[k] = vehicle_tours
+                    break
+
+        return tours
 
     @staticmethod
     def calc_distance(p1, p2):
