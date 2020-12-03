@@ -28,7 +28,8 @@ class VRP:
         self.x = None
         self.u = None
 
-        self.subtour_type = None
+        self.subtour_type = 'DFJ'  # DFJ or MTZ
+        self.gap_goal = 0.1
 
     def setup_random_data(self,
                           number_of_customers,
@@ -36,12 +37,9 @@ class VRP:
                           vehicle_capacity=5,
                           x_range=10, y_range=10,
                           demand_lower=1, demand_higher=2,
-                          subtour_type="DFJ",
                           seed=420):
         if seed is not None:
             np.random.seed(seed)
-
-        self.subtour_type = subtour_type
 
         self.Q = vehicle_capacity
         self.n = number_of_customers + 1
@@ -208,9 +206,12 @@ class VRP:
                 self.model.addConstr(quicksum(quicksum(self.q[j] * self.x[i, j, k] for j in self.N if j != i) for i in self.V if i < self.number_of_customers + 1) <= self.Q)
 
         self.model.update()
-        self.model.write("model.lp")
 
         # TODO: Set optimization limit
+        self.model.setParam("MIPGap", self.gap_goal)
+        self.model.update()
+
+        self.model.write("model.lp")
 
         return
 

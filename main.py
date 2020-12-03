@@ -15,6 +15,9 @@ else:
     vrp.setup_preset_data(file_name="validation_data_A/A-n32-k5.vrp",
                           number_of_vehicles=5)
 
+vrp.subtour_type = "DMJ"
+vrp.gap_goal = 0.1
+
 vrp.optimize()
 
 vrp.visualize()
