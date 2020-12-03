@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import itertools
+from collections import Counter
 from gurobipy import Model, GRB, quicksum
 
 
@@ -43,24 +44,30 @@ class VRP:
         self.y_range = y_range
         self.number_of_customers = number_of_customers
         self.demand_range = [demand_lower, demand_higher]
-
         self.K = list(range(number_of_vehicles))
+
         self.create_dataset()
+
+        self.create_arcs()
+
         self.setup()
 
     def setup_preset_data(self, file_name, number_of_vehicles):
 
-        nb_customers, truck_capacity, N, V, demands = self.read_input_cvrp(file_name)
+        nb_customers, truck_capacity, n, v, demands, nodes = self.read_input_cvrp(file_name)
 
         self.read_input_cvrp(file_name)
         self.Q = truck_capacity
         self.n = nb_customers + 1
         self.number_of_customers = nb_customers
-
         self.K = list(range(number_of_vehicles))
-        self.N = N
-        self.V = V
+
+        self.nodes = nodes
+        self.N = n
+        self.V = v
         self.q = demands
+
+        self.create_arcs()
 
         self.setup()
 
@@ -102,7 +109,6 @@ class VRP:
         # If data sheet does not exist, generate one
         self.generate_node_table()
         self.create_customers()
-        self.create_arcs()
         print("Node data generated")
 
     def optimize(self):
@@ -111,22 +117,23 @@ class VRP:
         return
 
     def setup(self):
+
         self.model = Model('CVRP')
 
         # Variables
-        # self.x = self.model.addVars(self.A, vtype=GRB.BINARY)
-        # self.u = self.model.addVars(self.N, vtype=GRB.CONTINUOUS)
         self.x = {}
         for i, j in self.A:
             for k in self.K:
                 self.x[i, j, k] = self.model.addVar(lb=0, ub=1, vtype=GRB.BINARY, name=f"x[{i},{j},{k}]")
-        # TODO: Not sure if this below is needed
+
         self.u = {}
         for j in self.N:
             for k in self.K:
                 self.u[j, k] = self.model.addVar(vtype=GRB.CONTINUOUS, name=f"u[{j},{k}]")
+
         # Make sure there are no duplicates of i,j,k combination in x
         assert len(self.x) == len(set(self.x.keys()))
+
         self.model.update()
 
         # Objective function
@@ -154,7 +161,7 @@ class VRP:
             for k in self.K:
                 self.model.addConstr(quicksum(self.x[j, i, k] for j in self.V[:-1] if j != i) ==  # What arrives to i
                                      quicksum(self.x[i, j, k] for j in self.V[1:] if j != i),  # Must leave from i
-                                     name=f"Leave_{i}{k}")
+                                     name=f"Leave_{i}_{k}")
 
         # Capacity constraint
         for k in self.K:
@@ -167,10 +174,12 @@ class VRP:
             for i, j in self.A:
                 if i not in (self.V[0], self.V[-1]) and j not in (self.V[0], self.V[-1]):
                     self.model.addConstr(self.u[j, k] - self.u[i, k] >= self.q[j] - self.Q * (1 - self.x[i, j, k]),
-                                         name=f"Subtour_{i}{j}{k}")
+                                         name=f"Subtour_{i}_{j}_{k}")
 
         self.model.update()
         self.model.write("model.lp")
+
+        # TODO: Set optimization limit
 
         return
 
@@ -220,7 +229,9 @@ class VRP:
         for i in self.N:
             self.q[i] = np.random.randint(self.demand_range[0], self.demand_range[1], size=1)[0]
 
-        assert sum(self.q.values()) <= self.Q * len(self.K), f"The total customer demand {sum(self.q.values())} exceeds the total vehicle capacity: {self.Q * len(self.K)} = {self.Q} * {len(self.K)}."
+        assert sum(self.q.values()) <= self.Q * len(self.K), f"The total customer demand {sum(self.q.values())} " \
+                                                             f"exceeds the total vehicle capacity: " \
+                                                             f"{self.Q * len(self.K)} = {self.Q} * {len(self.K)}."
         return
 
     def create_arcs(self):
@@ -232,13 +243,17 @@ class VRP:
         for j in self.V[1:]:
             self.A.append((self.V[0], j))
         # ...and there are only leading nodes to the depot end node.
-        for i in self.V[:-1]:
+        for i in self.V[1:-1]:
             self.A.append((i, self.V[-1]))
 
         # Remove the elements where i=j
         for i, tup in enumerate(self.A):
             if tup[0] == tup[1]:
                 self.A.pop(i)
+
+        # Make sure there are no duplicate arcs
+        duplicates = [(k, v) for k, v in Counter(self.A).items() if v > 1]
+        assert len(duplicates) == 0, f"Duplicate arc found: {duplicates}"
 
         # The cost to travel an arc equals its length
         self.c = {}
@@ -266,6 +281,8 @@ class VRP:
         file_it = iter(self.read_elem(filename))
 
         nb_nodes = 0
+        nb_customers = 0
+        truck_capacity = 0
         while True:
             token = next(file_it)
             if token == "DIMENSION":
@@ -283,6 +300,10 @@ class VRP:
                     sys.exit(1)
             elif token == "NODE_COORD_SECTION":
                 break
+
+        assert nb_customers != 0
+        assert nb_nodes != 0
+        assert truck_capacity != 0
 
         customers_x = [None] * nb_customers
         customers_y = [None] * nb_customers
@@ -352,91 +373,60 @@ class VRP:
             print("Expecting only one warehouse, more than one found")
             sys.exit(1)
 
-        return nb_customers, truck_capacity, N, V, demands
+        return nb_customers, truck_capacity, N, V, demands, nodes
 
-    ###########################################################
-    # TODO: use the code below for inspiration, don't steal it!
-    ###########################################################
-    def subtourelim(self, where):
-        if where == GRB.callback.MIPSOL:
-            # make a list of edges selected in the solution
-            for k in self.K:
-                selected = []
-                visited = set()
-                for i in self.N:
-                    sol = self.model.cbGetSolution([self.x[i, j, k] for j in self.N])
-                    new_selected = [(i, j) for j in self.N if sol[j] > 0.5]
-                    selected += new_selected
-
-                    if new_selected:
-                        visited.add(i)
-
-                # find the shortest cycle in the selected edge list
-                print(str(k) + ' selected ' + str(len(selected)) + ' ' + repr(selected))
-                print(str(k) + ' len visited ' + str(len(visited)) + ' ' + repr(visited))
-                tour = self.subtour(selected, visited)
-                print(str(k) + ' len tour ' + str(len(tour)) + ' ' + repr(tour))
-
-                if len(tour) < len(visited):
-                    # add a subtour elimination constraint
-                    expr = quicksum(self.x[i, j, k] for i, j in itertools.combinations(tour, 2))
-                    self.model.cbLazy(expr <= len(tour) - 1)
-
-                # must contain the start point
-                # start_point = self.delivers[k].pos
-                # if not start_point in visited:
-                #     model.cbLazy(degree[start_point, k] >= 1)
-
-    # Given a list of edges, finds the shortest subtour
-
-    # def subtour(edges):
-    #     visited = [False] * n
-    #     cycles = []
-    #     lengths = []
-    #     selected = [[] for i in range(n)]
+    # ###########################################################
+    # # TODO: use the code below for inspiration, don't steal it!
+    # ###########################################################
+    # def subtourelim(self, where):
+    #     if where == GRB.callback.MIPSOL:
+    #         # make a list of edges selected in the solution
+    #         for k in self.K:
+    #             selected = []
+    #             visited = set()
+    #             for i in self.N:
+    #                 sol = self.model.cbGetSolution([self.x[i, j, k] for j in self.N])
+    #                 new_selected = [(i, j) for j in self.N if sol[j] > 0.5]
+    #                 selected += new_selected
+    #
+    #                 if new_selected:
+    #                     visited.add(i)
+    #
+    #             # find the shortest cycle in the selected edge list
+    #             print(str(k) + ' selected ' + str(len(selected)) + ' ' + repr(selected))
+    #             print(str(k) + ' len visited ' + str(len(visited)) + ' ' + repr(visited))
+    #             tour = self.subtour(selected, visited)
+    #             print(str(k) + ' len tour ' + str(len(tour)) + ' ' + repr(tour))
+    #
+    #             if len(tour) < len(visited):
+    #                 # add a subtour elimination constraint
+    #                 expr = quicksum(self.x[i, j, k] for i, j in itertools.combinations(tour, 2))
+    #                 self.model.cbLazy(expr <= len(tour) - 1)
+    #
+    # def subtour(self, edges, visited):
+    #     unvisited = list(visited)
+    #     cycle = range(len(visited) + 1)
+    #     selected = {}
+    #     for x, y in edges:
+    #         selected[x] = []
     #     for x, y in edges:
     #         selected[x].append(y)
-    #     while True:
-    #         current = visited.index(False)
-    #         thiscycle = [current]
-    #         while True:
-    #             visited[current] = True
-    #             neighbors = [x for x in selected[current] if not visited[x]]
-    #             if len(neighbors) == 0:
-    #                 break
+    #     print(selected)
+    #     while unvisited:
+    #         thiscycle = []
+    #         neighbors = unvisited
+    #         while neighbors:
     #             current = neighbors[0]
     #             thiscycle.append(current)
-    #         cycles.append(thiscycle)
-    #         lengths.append(len(thiscycle))
-    #         if sum(lengths) == n:
-    #             break
-    #     return cycles[lengths.index(min(lengths))]
-
-    def subtour(self, edges, visited):
-        unvisited = list(visited)
-        cycle = range(len(visited) + 1)
-        selected = {}
-        for x, y in edges:
-            selected[x] = []
-        for x, y in edges:
-            selected[x].append(y)
-        print(selected)
-        while unvisited:
-            thiscycle = []
-            neighbors = unvisited
-            while neighbors:
-                current = neighbors[0]
-                thiscycle.append(current)
-                unvisited.remove(current)
-                print(thiscycle)
-                neighbors = [j for j in selected[current] if j in unvisited]
-            if len(cycle) > len(thiscycle):
-                cycle = thiscycle
-        return cycle
-
-    def optimize_subtour(self):
-        self.model.params.LazyConstraints = 1
-        self.model.optimize(self.subtourelim)
-        solution = self.model.getAttr('x', self.x)
-        return solution
-
+    #             unvisited.remove(current)
+    #             print(thiscycle)
+    #             neighbors = [j for j in selected[current] if j in unvisited]
+    #         if len(cycle) > len(thiscycle):
+    #             cycle = thiscycle
+    #     return cycle
+    #
+    # def optimize_subtour(self):
+    #     self.model.params.LazyConstraints = 1
+    #     self.model.optimize(self.subtourelim)
+    #     solution = self.model.getAttr('x', self.x)
+    #     return solution
