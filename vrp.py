@@ -31,14 +31,13 @@ class VRP:
         self.x = None
         self.u = None
 
+    def setup_random_data(self):
         self.create_dataset()
-        print("setup")
         self.setup()
-        print("optimize")
-        self.model.optimize()
-        print("done")
-        self.model.write("out.sol")
-        self.visualize()
+
+    def setup_preset_data(self):
+        self.load_dataset()
+        self.setup()
 
     def visualize(self):
         plt.title('Capacitated Vehicle Routing Problem')
@@ -79,9 +78,16 @@ class VRP:
         self.generate_node_table()
         self.create_customers()
         self.create_arcs()
+        print("Node data generated")
 
     def load_dataset(self):
         # TODO
+        raise NotImplementedError
+        return
+
+    def optimize(self):
+        self.model.optimize()
+        self.model.write("out.sol")
         return
 
     def setup(self):
