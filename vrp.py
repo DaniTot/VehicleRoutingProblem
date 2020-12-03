@@ -6,20 +6,16 @@ from gurobipy import Model, GRB, quicksum
 
 
 class VRP:
-    def __init__(self, number_of_customers, number_of_vehicles,
-                 vehicle_capacity=5, x_range=10, y_range=10, demand_lower=1, demand_higher=2,
-                 seed=420):
-        if seed is not None:
-            np.random.seed(seed)
+    def __init__(self):
 
-        self.Q = vehicle_capacity
-        self.n = number_of_customers + 1
-        self.x_range = x_range
-        self.y_range = y_range
-        self.number_of_customers = number_of_customers
-        self.demand_range = [demand_lower, demand_higher]
+        self.Q = None
+        self.n = None
+        self.x_range = None
+        self.y_range = None
+        self.number_of_customers = None
+        self.demand_range = None
 
-        self.K = list(range(number_of_vehicles))
+        self.K = None
         self.nodes = None
         self.N = None  # Customer Nodes
         self.V = None  # Depot and customer nodes
@@ -31,12 +27,41 @@ class VRP:
         self.x = None
         self.u = None
 
-    def setup_random_data(self):
+    def setup_random_data(self,
+                          number_of_customers,
+                          number_of_vehicles,
+                          vehicle_capacity=5,
+                          x_range=10, y_range=10,
+                          demand_lower=1, demand_higher=2,
+                          seed=420):
+        if seed is not None:
+            np.random.seed(seed)
+
+        self.Q = vehicle_capacity
+        self.n = number_of_customers + 1
+        self.x_range = x_range
+        self.y_range = y_range
+        self.number_of_customers = number_of_customers
+        self.demand_range = [demand_lower, demand_higher]
+
+        self.K = list(range(number_of_vehicles))
         self.create_dataset()
         self.setup()
 
-    def setup_preset_data(self):
-        self.load_dataset()
+    def setup_preset_data(self, file_name, number_of_vehicles):
+
+        nb_customers, truck_capacity, N, V, demands = self.read_input_cvrp(file_name)
+
+        self.read_input_cvrp(file_name)
+        self.Q = truck_capacity
+        self.n = nb_customers + 1
+        self.number_of_customers = nb_customers
+
+        self.K = list(range(number_of_vehicles))
+        self.N = N
+        self.V = V
+        self.q = demands
+
         self.setup()
 
     def visualize(self):
@@ -79,11 +104,6 @@ class VRP:
         self.create_customers()
         self.create_arcs()
         print("Node data generated")
-
-    def load_dataset(self):
-        # TODO
-        raise NotImplementedError
-        return
 
     def optimize(self):
         self.model.optimize()
@@ -184,6 +204,7 @@ class VRP:
         end_depot_coord = list(self.nodes.iloc[start_depot_idx])
         self.nodes = self.nodes.append(pd.DataFrame([end_depot_coord], columns=['x_coord', 'y_coord']),
                                        ignore_index=True)
+        print(self.nodes)
         end_depot_idx = self.nodes.index[-1]
         print("end_depot_idx", end_depot_idx)
 
@@ -241,7 +262,8 @@ class VRP:
     # The input files follow the "Augerat" format.
     def read_input_cvrp(self, filename):
         import sys
-        file_it = iter(self.read_elem(sys.argv[1]))
+        # file_it = iter(self.read_elem(sys.argv[1]))
+        file_it = iter(self.read_elem(filename))
 
         nb_nodes = 0
         while True:
@@ -279,16 +301,29 @@ class VRP:
                 customers_x[node_id - 2] = int(next(file_it))
                 customers_y[node_id - 2] = int(next(file_it))
 
-        # Compute distance matrix
-        distance_matrix = compute_distance_matrix(customers_x, customers_y)
-        distance_warehouses = compute_distance_warehouses(depot_x, depot_y, customers_x, customers_y)
+        nodes_coord_x = customers_x[:]
+        nodes_coord_x.append(depot_x)
+        nodes_coord_x.insert(0, depot_x)
+        nodes_coord_y = customers_y[:]
+        nodes_coord_y.append(depot_y)
+        nodes_coord_y.insert(0, depot_y)
+        nodes = pd.DataFrame(np.transpose(np.array([nodes_coord_x, nodes_coord_y])), columns=['x_coord', 'y_coord'])
+
+        # Create customer index list N, and node index list V
+        N = list(nodes.index[1:-1])
+        assert len(N) == nb_customers
+        V = list(nodes.index)
+        assert len(V) == nb_nodes + 1
 
         token = next(file_it)
         if token != "DEMAND_SECTION":
             print("Expected token DEMAND_SECTION")
             sys.exit(1)
 
-        demands = [None] * nb_customers
+        demands = {}
+        for n in N:
+            demands[n] = None
+
         for n in range(nb_nodes):
             node_id = int(next(file_it))
             if node_id != n + 1:
@@ -299,8 +334,8 @@ class VRP:
                     print("Demand for depot should be 0")
                     sys.exit(1)
             else:
-                # -2 because orginal customer indices are in 2..nbNodes
-                demands[node_id - 2] = int(next(file_it))
+                # First element in N is 1, but the first customer in the file is 2
+                demands[node_id - 1] = int(next(file_it))
 
         token = next(file_it)
         if token != "DEPOT_SECTION":
@@ -317,7 +352,7 @@ class VRP:
             print("Expecting only one warehouse, more than one found")
             sys.exit(1)
 
-        return (nb_customers, truck_capacity, distance_matrix, distance_warehouses, demands)
+        return nb_customers, truck_capacity, N, V, demands
 
     ###########################################################
     # TODO: use the code below for inspiration, don't steal it!
