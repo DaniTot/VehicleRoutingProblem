@@ -2,7 +2,7 @@ from vrp import VRP
 
 vrp = VRP()
 
-random = False
+random = True
 
 if random:
     vrp.setup_random_data(number_of_customers=15,
@@ -15,7 +15,11 @@ else:
     vrp.setup_preset_data(file_name="validation_data_A/A-n32-k5.vrp",
                           number_of_vehicles=5)
 
+
 vrp.gap_goal = 0.1
+vrp.subtour_type = 'MTZ'
+
+vrp.setup()
 
 vrp.optimize()
 
