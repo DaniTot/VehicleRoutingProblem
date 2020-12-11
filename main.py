@@ -3,7 +3,7 @@ from vrp import VRP
 vrp = VRP()
 
 random = True
-formulation = ["capacitated", "timed"][1]
+formulation = ["capacitated", "timed"][0]
 
 
 # vrp.gap_goal = 0.01
@@ -13,7 +13,7 @@ if formulation is "capacitated":
     if random:
         vrp.subtour_type = ['MTZ', 'DFJ'][1]
         vrp.setup_random_data(number_of_customers=5,
-                              number_of_vehicles=3,
+                              number_of_vehicles=2,
                               vehicle_capacity=10,
                               x_range=10, y_range=10,
                               demand_lower=1, demand_higher=5,
@@ -30,7 +30,7 @@ elif formulation is "timed":
     vrp.processing_time = 1
     if random:
         vrp.setup_random_data(number_of_customers=5,
-                              number_of_vehicles=3,
+                              number_of_vehicles=2,
                               vehicle_capacity=10,
                               x_range=10, y_range=10,
                               demand_lower=1, demand_higher=5,

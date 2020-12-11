@@ -230,11 +230,11 @@ class VRP:
         for i in self.N:
             self.q[i] = np.random.randint(self.demand_range[0], self.demand_range[1], size=1)[0]
 
-        # assert sum(self.q.values()) <= self.Q * len(self.K), f"The total customer demand {sum(self.q.values())} " \
-        #                                                      f"exceeds the total vehicle capacity: " \
-        #                                                      f"{self.Q * len(self.K)} = {self.Q} * {len(self.K)}."
+        assert sum(self.q.values()) <= self.Q * len(self.K), f"The total customer demand {sum(self.q.values())} " \
+                                                             f"exceeds the total vehicle capacity: " \
+                                                             f"{self.Q * len(self.K)} = {self.Q} * {len(self.K)}."
 
-        self.Q = sum(self.q.values()) // len(self.K) + 1  # ensure that the demand can always be fulfilled
+        # self.Q = sum(self.q.values()) // len(self.K) + 1  # ensure that the demand can always be fulfilled
 
         if self.subtour_type is "TW":
             # Assign time windows to each customer
