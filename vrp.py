@@ -5,7 +5,7 @@ import itertools
 
 from collections import Counter
 from matplotlib.markers import MarkerStyle
-from gurobipy import Model, GRB, quicksum
+from gurobipy import Model, GRB, quicksum, LinExpr
 
 
 import time
@@ -116,60 +116,41 @@ class VRP:
     def visualize(self,plot_sol='y'):
         plt.title('Capacitated Vehicle Routing Problem')
 
-        cmap           = plt.cm.get_cmap('hsv', len(self.K) + 1)
-        depot_node     = np.array(self.nodes.iloc[self.V[0]])
+        cmap = plt.cm.get_cmap('hsv', len(self.K) + 1)
+
+        plt.plot(np.array(self.nodes.iloc[self.V[0]])[0], np.array(self.nodes.iloc[self.V[0]])[1], marker='*',
+                 markersize=20, label='Depot', c='r', )
+        plt.scatter(np.array(self.nodes.iloc[self.N])[:, 0],
+                    np.array(self.nodes.iloc[self.N])[:, 1], c='b', label='Customer')
+        # plt.annotate([self.V[0], self.V[-1]], (self.nodes.iloc[self.V[0]][0], self.nodes.iloc[self.V[0]][1]),
+        #              xytext=(20, -20), textcoords='offset points', ha='right', va='bottom')
+        for idx in self.V[1:-1]:
+            plt.annotate(idx, (self.nodes.iloc[idx][0], self.nodes.iloc[idx][1]),
+                         xytext=(5, 2), textcoords='offset points', ha='right', va='bottom')
         
-        customer_nodes = np.array(self.nodes.iloc[self.N])
+        travel_paths = {}
+        times = {}
 
-        plt.scatter(depot_node[0], depot_node[1], label='Depot', s=100, facecolors='none', edgecolors='k')
+        if plot_sol in ['y', 'yes']:
 
-        # plt.annotate(self.V[0], (depot_node), xytext=depot_node,textcoords='offset points')
-        plt.scatter(customer_nodes[:, 0], customer_nodes[:, 1], s=100, facecolors='none', edgecolors='k', label='Customer')
+            for k in self.K:
+                travel_paths[k] = []
+                for (i, j) in self.A:
+                    # Using the round function, in case truncation leads to something like 0.9999
+                    if round(self.x[i, j, k].x) == 1:
+                        travel_paths[k].append((i, j))
 
-        # active_arcs = []
-
-        # if plot_sol == 'y':
-        #     for i,j in self.A:
-        #         for k in self.K:
-        #             if round(self.x[i,j,k].x) == 1:
-        #                 active_arcs.append([i,j,k])
-        #     active_arcs = np.vstack(active_arcs)
-
-        #     tours       = self.subtour(self.K,active_arcs)
-
-        #     for k in tours.keys():
-        #         tour = np.array(tours[k]).flatten() - 1
-        #         plt.scatter(customer_nodes[tour[1:-1], 0], customer_nodes[tour[1:-1], 1], s=100, facecolors='none', edgecolors=cmap(k), label='Customer')
-
-
-
-        # for idx in self.V[1:-1]:
-        #     plt.annotate(idx, (self.nodes.iloc[idx][0], self.nodes.iloc[idx][1]),
-        #                  xytext=(5, 2), textcoords='offset points', ha='right', va='bottom')
-
-        # if plot_sol in ['y','yes']:
-        #     travel_paths = {}
-        #     for k in self.K:
-        #         travel_paths[k] = []
-        #         for (i, j) in self.A:
-        #             # Using the round function, in case truncation leads to something like 0.9999
-        #             if round(self.x[i, j, k].x) == 1:
-        #                 travel_paths[k].append((i, j))
-
-        #                 plt.plot([self.nodes.iloc[i][0], self.nodes.iloc[j][0]],
-        #                         [self.nodes.iloc[i][1], self.nodes.iloc[j][1]], c=cmap(k),zorder=0)
-        #                 if (i, j) != (self.V[0], self.V[-1]) and (i, j) != (self.V[-1], self.V[0]):
-        #                     plt.annotate(round(self.c[(i, j)], 2),
-        #                                 ((self.nodes.iloc[i][0] + self.nodes.iloc[j][0]) / 2,
-        #                                 (self.nodes.iloc[i][1] + self.nodes.iloc[j][1]) / 2),
-        #                                 xytext=(20, 2), textcoords='offset points', ha='right', va='bottom')
-        # print(self.V)
-        # print(travel_paths)
-        # print(self.q)
-
+                        plt.plot([self.nodes.iloc[i][0], self.nodes.iloc[j][0]],
+                                [self.nodes.iloc[i][1], self.nodes.iloc[j][1]], c=cmap(k), zorder=0)
+                        if (i, j) != (self.V[0], self.V[-1]) and (i, j) != (self.V[-1], self.V[0]):
+                            plt.annotate(round(self.c[(i, j)], 2),
+                                        ((self.nodes.iloc[i][0] + self.nodes.iloc[j][0]) / 2,
+                                        (self.nodes.iloc[i][1] + self.nodes.iloc[j][1]) / 2),
+                                        xytext=(20, 2), textcoords='offset points', ha='right', va='bottom')
+        print(travel_paths)
         plt.legend(loc='lower right')
         plt.show()
-
+        return
 
     ################################           DATASET        ###################################### 
     ################################################################################################
@@ -261,6 +242,13 @@ class VRP:
         # Make sure there are no duplicate arcs
         duplicates = [(k, v) for k, v in Counter(self.A).items() if v > 1]
         assert len(duplicates) == 0, f"Duplicate arc found: {duplicates}"
+
+        # sort all the arcs
+        A = np.array(self.A)
+
+        sort_ = np.lexsort((A[:,1],A[:,0]),axis=0)
+
+        self.A = A[sort_]
 
         # The cost to travel an arc equals its length
         self.c = {}
@@ -427,7 +415,7 @@ class VRP:
 
         self.model.update()
 
-        # TODO: Set optimization limit
+        # optimization limit
         self.model.setParam("MIPGap", self.gap_goal)
         self.model.update()
 
@@ -538,8 +526,15 @@ class VRP:
                 if len(tours[k]) > 1:
                     for tour in tours[k]:
                         S = np.unique(tour)
-                        # print(S)
-                        expr = quicksum(mdl._x[i, j, k] for i in S for j in S if j != i if i != mdl._V[-1] if j != mdl._V[0])
+                        expr = LinExpr()
+
+                        for i in S:
+                            if i != mdl._V[-1]:
+                                for j in S:
+                                    if j != i and j != mdl._V[0]:
+                                            expr += mdl._x[i, j, k] 
+
+                        # expr = quicksum(mdl._x[i, j, k] for i in S for j in S if j != i if i != mdl._V[-1] or j != mdl._V[0])
                         mdl.cbLazy(expr <= len(S) - 1)
                         
     @staticmethod
