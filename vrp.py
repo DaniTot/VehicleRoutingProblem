@@ -2,8 +2,14 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import itertools
+
 from collections import Counter
+from matplotlib.markers import MarkerStyle
 from gurobipy import Model, GRB, quicksum
+
+
+import time
+
 
 
 class VRP:
@@ -87,13 +93,14 @@ class VRP:
 
         self.create_arcs()
 
-    def setup_preset_data(self, file_name, number_of_vehicles,subtour_type = 'DFJ'):
+    def setup_preset_data(self, file_name, number_of_vehicles, subtour_type = 'DFJ'):
 
         nb_customers, truck_capacity, n, v, demands, nodes = self.read_input_cvrp(file_name)
 
         self.read_input_cvrp(file_name)
         self.Q = truck_capacity
         self.n = nb_customers + 1
+
         self.number_of_customers = nb_customers
         self.K = np.arange(1,number_of_vehicles+1)
 
@@ -106,39 +113,60 @@ class VRP:
 
         self.create_arcs()
 
-    def visualize(self):
+    def visualize(self,plot_sol='y'):
         plt.title('Capacitated Vehicle Routing Problem')
 
-        cmap = plt.cm.get_cmap('hsv', len(self.K) + 1)
+        cmap           = plt.cm.get_cmap('hsv', len(self.K) + 1)
+        depot_node     = np.array(self.nodes.iloc[self.V[0]])
+        
+        customer_nodes = np.array(self.nodes.iloc[self.N])
 
-        plt.plot(np.array(self.nodes.iloc[self.V[0]])[0], np.array(self.nodes.iloc[self.V[0]])[1], marker='*',
-                 markersize=20, label='Depot', c='r', )
-        plt.scatter(np.array(self.nodes.iloc[self.N])[:, 0],
-                    np.array(self.nodes.iloc[self.N])[:, 1], c='b', label='Customer')
-        plt.annotate([self.V[0], self.V[-1]], (self.nodes.iloc[self.V[0]][0], self.nodes.iloc[self.V[0]][1]),
-                     xytext=(20, -20), textcoords='offset points', ha='right', va='bottom')
-        for idx in self.V[1:-1]:
-            plt.annotate(idx, (self.nodes.iloc[idx][0], self.nodes.iloc[idx][1]),
-                         xytext=(5, 2), textcoords='offset points', ha='right', va='bottom')
-        travel_paths = {}
+        plt.scatter(depot_node[0], depot_node[1], label='Depot', s=100, facecolors='none', edgecolors='k')
 
-        for k in self.K:
-            travel_paths[k] = []
-            for (i, j) in self.A:
-                # Using the round function, in case truncation leads to something like 0.9999
-                if round(self.x[i, j, k].x) == 1:
-                    travel_paths[k].append((i, j))
+        # plt.annotate(self.V[0], (depot_node), xytext=depot_node,textcoords='offset points')
+        plt.scatter(customer_nodes[:, 0], customer_nodes[:, 1], s=100, facecolors='none', edgecolors='k', label='Customer')
 
-                    plt.plot([self.nodes.iloc[i][0], self.nodes.iloc[j][0]],
-                             [self.nodes.iloc[i][1], self.nodes.iloc[j][1]], c=cmap(k),zorder=0)
-                    if (i, j) != (self.V[0], self.V[-1]) and (i, j) != (self.V[-1], self.V[0]):
-                        plt.annotate(round(self.c[(i, j)], 2),
-                                     ((self.nodes.iloc[i][0] + self.nodes.iloc[j][0]) / 2,
-                                      (self.nodes.iloc[i][1] + self.nodes.iloc[j][1]) / 2),
-                                     xytext=(20, 2), textcoords='offset points', ha='right', va='bottom')
-        print(self.V)
-        print(travel_paths)
-        print(self.q)
+        # active_arcs = []
+
+        # if plot_sol == 'y':
+        #     for i,j in self.A:
+        #         for k in self.K:
+        #             if round(self.x[i,j,k].x) == 1:
+        #                 active_arcs.append([i,j,k])
+        #     active_arcs = np.vstack(active_arcs)
+
+        #     tours       = self.subtour(self.K,active_arcs)
+
+        #     for k in tours.keys():
+        #         tour = np.array(tours[k]).flatten() - 1
+        #         plt.scatter(customer_nodes[tour[1:-1], 0], customer_nodes[tour[1:-1], 1], s=100, facecolors='none', edgecolors=cmap(k), label='Customer')
+
+
+
+        # for idx in self.V[1:-1]:
+        #     plt.annotate(idx, (self.nodes.iloc[idx][0], self.nodes.iloc[idx][1]),
+        #                  xytext=(5, 2), textcoords='offset points', ha='right', va='bottom')
+
+        # if plot_sol in ['y','yes']:
+        #     travel_paths = {}
+        #     for k in self.K:
+        #         travel_paths[k] = []
+        #         for (i, j) in self.A:
+        #             # Using the round function, in case truncation leads to something like 0.9999
+        #             if round(self.x[i, j, k].x) == 1:
+        #                 travel_paths[k].append((i, j))
+
+        #                 plt.plot([self.nodes.iloc[i][0], self.nodes.iloc[j][0]],
+        #                         [self.nodes.iloc[i][1], self.nodes.iloc[j][1]], c=cmap(k),zorder=0)
+        #                 if (i, j) != (self.V[0], self.V[-1]) and (i, j) != (self.V[-1], self.V[0]):
+        #                     plt.annotate(round(self.c[(i, j)], 2),
+        #                                 ((self.nodes.iloc[i][0] + self.nodes.iloc[j][0]) / 2,
+        #                                 (self.nodes.iloc[i][1] + self.nodes.iloc[j][1]) / 2),
+        #                                 xytext=(20, 2), textcoords='offset points', ha='right', va='bottom')
+        # print(self.V)
+        # print(travel_paths)
+        # print(self.q)
+
         plt.legend(loc='lower right')
         plt.show()
 
@@ -154,7 +182,8 @@ class VRP:
 
     @staticmethod
     def calc_distance(p1, p2):
-        dist = (((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5)
+        dist = np.linalg.norm( np.subtract(p1, p2) ) # Euclidian distance
+        # dist = (((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5)
         return dist
 
     def generate_node_table(self, file_name="nodes.csv"):
@@ -174,6 +203,7 @@ class VRP:
 
     def create_customers(self):
         random_selection = list(self.nodes.sample(n=self.n + 1).index)
+
         # Select the depot node
         # Depot node is randomly selected
         start_depot_idx = random_selection.pop(np.random.randint(0, len(random_selection) - 1, size=1)[0])
@@ -197,48 +227,40 @@ class VRP:
 
         print(self.nodes)
 
-        # self.N = random_selection  # The rest will be the customer nodes
-        # temp_list = self.N[:]
-        # temp_list.insert(0, start_depot_idx)
-        # temp_list.append(end_depot_idx)
-        # # self.V[0] is the start depot, and self.V[-1] is the end depot
-        # self.V = temp_list[:]
-
         # Assign the customer demand to each customer
         self.q = {}
         for i in self.N:
             self.q[i] = np.random.randint(self.demand_range[0], self.demand_range[1], size=1)[0]
-
-        # assert sum(self.q.values()) <= self.Q * len(self.K), f"The total customer demand {sum(self.q.values())} " \
-        #                                                      f"exceeds the total vehicle capacity: " \
-        #                                                      f"{self.Q * len(self.K)} = {self.Q} * {len(self.K)}."
-
-        self.Q = sum(self.q.values()) // len(self.K)  + 1 # ensure that the demand can always be fulfilled
+       
+        assert sum(self.q.values()) <= self.Q * len(self.K), f"The total customer demand {sum(self.q.values())} " \
+                                                             f"exceeds the total vehicle capacity: " \
+                                                             f"{self.Q * len(self.K)} = {self.Q} * {len(self.K)}."
 
         return
 
     def create_arcs(self):
-        # # Create arcs between customer nodes
-        # self.A = [c for c in itertools.product(self.N, self.N)]
+        """
+        Create arcs between customer nodes
+        :return:
+        """
+        self.A = [c for c in itertools.product(self.N, self.N)]
 
-        # # Add depot nodes
-        # # Make sure there are only leaving arcs from the depot start node...
-        # for j in self.V[1:]:
-        #     self.A.append((self.V[0], j))
-        # # ...and there are only leading nodes to the depot end node.
-        # for i in self.V[1:-1]:
-        #     self.A.append((i, self.V[-1]))
+        # Add depot nodes
+        # Make sure there are only leaving arcs from the depot start node...
+        for j in self.V[1:]:
+            self.A.append((self.V[0], j))
+        # ...and there are only leading nodes to the depot end node.
+        for i in self.V[1:-1]:
+            self.A.append((i, self.V[-1]))
 
-        # # Remove the elements where i=j
-        # for i, tup in enumerate(self.A):
-        #     if tup[0] == tup[1]:
-        #         self.A.pop(i)
+        # Remove the elements where i=j
+        for i, tup in enumerate(self.A):
+            if tup[0] == tup[1]:
+                self.A.pop(i)
 
-        # # Make sure there are no duplicate arcs
-        # duplicates = [(k, v) for k, v in Counter(self.A).items() if v > 1]
-        # assert len(duplicates) == 0, f"Duplicate arc found: {duplicates}"
-
-        self.A = [(i, j) for i in self.V for j in self.V if i != j]    # arcs between nodes and vehicle k
+        # Make sure there are no duplicate arcs
+        duplicates = [(k, v) for k, v in Counter(self.A).items() if v > 1]
+        assert len(duplicates) == 0, f"Duplicate arc found: {duplicates}"
 
         # The cost to travel an arc equals its length
         self.c = {}
@@ -249,6 +271,7 @@ class VRP:
             y_j = self.nodes.get('y_coord')[j]
             self.c[(i, j)] = self.calc_distance((x_i, y_i), (x_j, y_j))
         return
+
 
 
 
@@ -371,6 +394,54 @@ class VRP:
     ################################################################################################
     def setup(self):
 
+        self.general_setup()
+
+        self.model.update()
+
+        # Miller-Tucker-Zemlin formulation for subtour elimination
+        # $$u_{j} - u_{i} \geq q_{j} - Q(1-x_{ijk}), i,j = \{1,....,n\}, i \neq j$$
+        if self.subtour_type == 'MTZ':
+            for k in self.K:
+                for i, j in self.A:
+                    if i >= 1 and j >= 1:
+                        if i != self.number_of_customers + 1 and j != self.number_of_customers + 1:
+                            self.model.addConstr(self.u[j, k] - self.u[i, k] >= self.q[j] - self.Q * (1 - self.x[i, j, k]))
+
+            # Capacity constraint
+            for k in self.K:
+                for i in self.N:
+                    self.model.addConstr(self.u[i, k] >= self.q[i])
+                    self.model.addConstr(self.u[i, k] <= self.Q)
+
+        # Subtour elimination constraint (Dantzig-Fulkerson Johnson)
+        # $$\sum_{i\in S}\sum_{j \in S,j \neq i} x_{ij} \leq |S| - 1$$
+        elif self.subtour_type == 'DFJ':
+            for k in self.K:
+                self.model.addConstr(
+                    quicksum(
+                        quicksum(
+                            self.q[j] * self.x[i, j, k] for j in self.N if j != i
+                            ) 
+                        for i in self.V[:-1] 
+                    ) <= self.Q )
+
+        self.model.update()
+
+        # TODO: Set optimization limit
+        self.model.setParam("MIPGap", self.gap_goal)
+        self.model.update()
+
+        self.model.write("model.lp")
+
+        return
+
+
+    def general_setup(self):
+        """
+        Basic model elements shared by both CVRP and CVRPTW
+        :return:
+        """
+
         self.model = Model()
 
         # Variables
@@ -384,100 +455,61 @@ class VRP:
             for k in self.K:
                 self.u[j, k] = self.model.addVar(vtype=GRB.CONTINUOUS, name=f"u[{j},{k}]")
 
-        # Make sure there are no duplicates of i,j,k combination in x
-        assert len(self.x) == len(set(self.x.keys()))
-
-        self.model.update()
-
         # Objective function
         # explanation for self.V[:-1] = [0, 1, ..., n]
         # explanation for self.V[1:] = [1, ..., n, n+1]
         self.model.setObjective(quicksum(self.x[i, j, k] * self.c[i, j] for i in self.V[:-1] for j in self.V[1:]
                                          for k in self.K if i != j),
                                 sense=GRB.MINIMIZE)
+
+        # Make sure there are no duplicates of i,j,k combination in x
+        assert len(self.x) == len(set(self.x.keys()))
+
         self.model.update()
 
         # Constraints
         # Each vehicle must leave the depot
         for k in self.K:
             self.model.addConstr(quicksum(self.x[self.V[0], j, k] for j in self.V[1:]) == 1, name=f"Start_{k}")
+
         # Each vehicle must return to depot
         for k in self.K:
             self.model.addConstr(quicksum(self.x[j, self.V[-1], k] for j in self.V[:-1]) == 1, name=f"Finish_{k}")
+
         # Each customer must be visited by one vehicle
         for i in self.N:
             self.model.addConstr(quicksum(self.x[j, i, k] for k in self.K for j in self.V[:-1] if j != i) == 1,
                                  name=f"Visit_{i}")
-        # If a vehicle visits a customer, it must also leave that customer
 
+        # If a vehicle visits a customer, it must also leave that customer
         for i in self.N:
             for k in self.K:
                 self.model.addConstr(quicksum(self.x[j, i, k] for j in self.V[:-1] if j != i) ==  # What arrives to i
                                      quicksum(self.x[i, j, k] for j in self.V[1:] if j != i),  # Must leave from i
                                      name=f"Leave_{i}_{k}")
 
-        # Capacity constraint
-        for k in self.K:
-            self.model.addConstr(
-                quicksum(self.q[j] * self.x[i, j, k] for i in self.V[:-1] for j in self.V[1:-1] if i != j) <= self.Q,
-                name=f"Capacity_{k}")
-
-        # # TODO: Sub-tour elimination via Miller-Tucker-Zemlin formulation
+        # # Capacity constraint
         # for k in self.K:
-        #     for i, j in self.A:
-        #         if i not in (self.V[0], self.V[-1]) and j not in (self.V[0], self.V[-1]):
-        #             self.model.addConstr(self.u[j, k] - self.u[i, k] >= self.q[j] - self.Q * (1 - self.x[i, j, k]),
-        #                                  name=f"Subtour_{i}_{j}_{k}")
-
-        # Subtour elimination constraint (miller-tucker-zemlin)
-        #
-        # $$u_{j} - u_{i} \geq q_{j} - Q(1-x_{ijk}), i,j = \{1,....,n\}, i \neq j$$
-
-        # Miller-Tucker-Zemlin formulation for subtour elimination
-
-        if self.subtour_type == 'MTZ':
-            for k in self.K:
-                for i, j in self.A:
-                    if i >= 1 and j >= 1:
-                        if i != self.number_of_customers + 1 and j != self.number_of_customers + 1:
-                            self.model.addConstr(self.u[j, k] - self.u[i, k] >= self.q[j] - self.Q * (1 - self.x[i, j, k]))
-
-            # Capacity constraint
-            for i in self.N:
-                for k in self.K:
-                    self.model.addConstr(self.u[i, k] >= self.q[i])
-                    self.model.addConstr(self.u[i, k] <= self.Q)
-
-        # Subtour elimination constraint (Dantzig-Fulkerson Johnson)
-        #
-        # $$\sum_{i\in S}\sum_{j \in S,j \neq i} x_{ij} \leq |S| - 1$$
-        elif self.subtour_type == 'DFJ':
-            for k in self.K:
-                self.model.addConstr(quicksum(quicksum(self.q[j] * self.x[i, j, k] for j in self.N if j != i) for i in self.V if i < self.number_of_customers + 1) <= self.Q)
-
-        self.model.update()
-
-        # TODO: Set optimization limit
-        self.model.setParam("MIPGap", self.gap_goal)
-        self.model.update()
-
-        self.model.write("model.lp")
+        #     self.model.addConstr(
+        #         quicksum(self.q[j] * self.x[i, j, k] for i in self.V[:-1] for j in self.V[1:-1] if i != j) <= self.Q,
+        #         name=f"Capacity_{k}")
 
         return
 
-
+    def add_model_vars_dfj(self):
+            self.model._x = self.x # User made variables get passed along with underscore VarName
+            self.model._A = self.A
+            self.model._K = self.K
+            self.model._V = self.V
+            self.model._subtour = self.subtour
 
     def optimize(self):
 
         if self.subtour_type == 'MTZ':
             self.model.optimize()
         elif self.subtour_type == 'DFJ':
+            self.add_model_vars_dfj()
             self.model.Params.lazyConstraints = 1
-            self.model._x = self.x # User made variables get passed along with underscore VarName
-            self.model._A = self.A
-            self.model._K = self.K
-            self.model._V = self.V
-            self.model._subtour = self.subtour
             self.model.optimize(self.subtourelim)
 
         save_result = input("Save optimized result?:")
@@ -487,33 +519,34 @@ class VRP:
         return
 
     @staticmethod
-    def subtourelim(mdl, where):
+    def subtourelim(mdl,where):
         if where == GRB.callback.MIPSOL:
-
             active_arcs = []
-            # TODO: look into self._vars, self.cbGetSolution
+            solutions = mdl.cbGetSolution(mdl._x)
+
             for i, j in mdl._A:
                 for k in mdl._K:
-                    solutions = mdl.cbGetSolution(mdl._x)
-                    if solutions[i, j, k] > 0.99:
+                    if round(solutions[i, j, k]) == 1:
                         active_arcs.append([i, j, k])
 
             active_arcs = np.vstack(active_arcs)
 
-            tours = mdl._subtour(mdl, active_arcs)
-            
+            tours = mdl._subtour(mdl._K, active_arcs)
+
+            # add lazy constraints
             for k in tours.keys():
                 if len(tours[k]) > 1:
                     for tour in tours[k]:
                         S = np.unique(tour)
-                        expr = quicksum(mdl._x[i, j, k] for i in S for j in S if j != i)
+                        # print(S)
+                        expr = quicksum(mdl._x[i, j, k] for i in S for j in S if j != i if i != mdl._V[-1] if j != mdl._V[0])
                         mdl.cbLazy(expr <= len(S) - 1)
-
+                        
     @staticmethod
-    def subtour(mdl, active_arcs):
+    def subtour(K, active_arcs):
         tours = {}
 
-        for k in mdl._K:
+        for k in K:
             vehicle_tours = []
             vehicle_arcs = active_arcs[np.where(active_arcs[:, 2] == k)][:, 0:2]
             start_node, finish_node = vehicle_arcs[0]
