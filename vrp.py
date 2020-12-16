@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
+import networkx as nx
 import itertools
+import matplotlib.pyplot as plt
+
 
 from collections import Counter
 from matplotlib.markers import MarkerStyle
@@ -114,42 +116,132 @@ class VRP:
         self.create_arcs()
 
     def visualize(self,plot_sol='y'):
-        plt.title('Capacitated Vehicle Routing Problem')
 
         cmap = plt.cm.get_cmap('hsv', len(self.K) + 1)
+        fig, ax = plt.subplots(1, 1)  # a figure with a 1x1 grid of Axes
 
-        plt.plot(np.array(self.nodes.iloc[self.V[0]])[0], np.array(self.nodes.iloc[self.V[0]])[1], marker='*',
-                 markersize=20, label='Depot', c='r', )
-        plt.scatter(np.array(self.nodes.iloc[self.N])[:, 0],
-                    np.array(self.nodes.iloc[self.N])[:, 1], c='b', label='Customer')
-        # plt.annotate([self.V[0], self.V[-1]], (self.nodes.iloc[self.V[0]][0], self.nodes.iloc[self.V[0]][1]),
-        #              xytext=(20, -20), textcoords='offset points', ha='right', va='bottom')
-        for idx in self.V[1:-1]:
-            plt.annotate(idx, (self.nodes.iloc[idx][0], self.nodes.iloc[idx][1]),
-                         xytext=(5, 2), textcoords='offset points', ha='right', va='bottom')
         
-        travel_paths = {}
-        times = {}
-
         if plot_sol in ['y', 'yes']:
 
-            for k in self.K:
-                travel_paths[k] = []
-                for (i, j) in self.A:
-                    # Using the round function, in case truncation leads to something like 0.9999
-                    if round(self.x[i, j, k].x) == 1:
-                        travel_paths[k].append((i, j))
+            plt.title('Capacitated Vehicle Routing Problem')
 
-                        plt.plot([self.nodes.iloc[i][0], self.nodes.iloc[j][0]],
-                                [self.nodes.iloc[i][1], self.nodes.iloc[j][1]], c=cmap(k), zorder=0)
-                        if (i, j) != (self.V[0], self.V[-1]) and (i, j) != (self.V[-1], self.V[0]):
-                            plt.annotate(round(self.c[(i, j)], 2),
-                                        ((self.nodes.iloc[i][0] + self.nodes.iloc[j][0]) / 2,
-                                        (self.nodes.iloc[i][1] + self.nodes.iloc[j][1]) / 2),
-                                        xytext=(20, 2), textcoords='offset points', ha='right', va='bottom')
-        print(travel_paths)
-        plt.legend(loc='lower right')
-        plt.show()
+            self.find_active_arcs()
+            tours = self.subtour(self.K, self.active_arcs)
+
+            for k in tours.keys():
+                vehicle_color = cmap(k-1)[0:3]
+                vehicle_arcs = tours[k]
+                G = nx.DiGraph()
+                for tour in vehicle_arcs:
+                    idx = 0
+                    for node in tour:
+                        node_pos = (self.nodes.iloc[node][0],self.nodes.iloc[node][1])
+                        G.add_node(node,pos=node_pos)
+
+                        if idx < len(tour)-1:
+                            node_i = tour[idx]
+                            node_j = tour[idx+1]
+                            edge_cost = round(self.c[(node_i,node_j)],2)
+                            G.add_edge( node_i, node_j, weight=edge_cost )
+                            idx += 1
+
+                    node_pos = nx.get_node_attributes(G,'pos')
+                    weights = nx.get_edge_attributes(G,'weight')
+
+                    nx.draw(G,node_pos,ax=ax, node_size=400, node_color='w', edgecolors=vehicle_color, edge_color= vehicle_color )
+                    nx.draw_networkx_edge_labels(G, node_pos, ax=ax, edge_labels=weights)      
+                    
+                    ax.scatter([],[], c=cmap(k-1), label='k='+str(k) )
+
+                    for node in node_pos.keys():
+                        pos = node_pos[node]   
+
+                        if node == self.V[0]:
+                            offset = -0.1
+                            comma_on = ','
+                        elif node == self.V[-1]:
+                            offset = 0.1
+                        else:
+                            offset = 0
+                            comma_on=''
+                        ax.text(pos[0] + offset, pos[1], s=str(node)+comma_on, horizontalalignment='center',verticalalignment='center')
+
+
+            # Recolor depot node to black
+            G = nx.DiGraph()
+            pos = (self.nodes.iloc[0][0],self.nodes.iloc[0][1])
+            G.add_node(0,pos=pos)
+            node_pos = nx.get_node_attributes(G,'pos')
+            nx.draw_networkx_nodes(G,node_pos,ax=ax, node_size=400, node_color='w', edgecolors='k')
+
+            # Add axes
+            xmin = self.nodes.min()['x_coord'] - 1
+            ymin = self.nodes.min()['y_coord'] - 1
+
+            xmax = self.nodes.max()['x_coord'] + 1
+            ymax = self.nodes.max()['y_coord'] + 1
+
+            plt.axis('on') # turns on axis
+            ax.set(xlim=(xmin, xmax), ylim=(ymin, ymax))
+            ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+            plt.legend(loc='lower right')
+
+            print("Subtours")
+            print(tours)
+
+            plt.show()     
+
+
+        elif plot_sol == 'n':
+            plt.title('Capacitated Vehicle Routing Problem')
+
+            G = nx.Graph()
+
+            for node in self.V:
+                node_pos = (self.nodes.iloc[node][0],self.nodes.iloc[node][1])
+                G.add_node(node,pos=node_pos)
+
+            for edge in self.c.keys():
+                if edge != (self.V[0],self.V[-1]) and edge[1] != self.V[-1]:
+                    G.add_edge(edge[0],edge[1],weight=round(self.c[edge],2))
+
+            node_pos = nx.get_node_attributes(G, 'pos')
+            weights = nx.get_edge_attributes(G , 'weight')
+
+            offset = 0
+            nx.draw(G, node_pos, ax=ax, node_color='w', edgecolors='k')
+
+            for node in node_pos.keys():
+                pos = node_pos[node]   
+
+                if node == self.V[0]:
+                    offset = -0.1
+                    comma_on = ','
+                elif node == self.V[-1]:
+                    offset = 0.1
+                else:
+                    offset = 0
+                    comma_on=''
+                ax.text(pos[0] + offset, pos[1], s=str(node)+comma_on, horizontalalignment='center',verticalalignment='center')
+
+            nx.draw_networkx_edge_labels(G,node_pos,edge_labels=weights)
+
+
+            # Add axes
+            xmin = self.nodes.min()['x_coord'] - 1
+            ymin = self.nodes.min()['y_coord'] - 1
+
+            xmax = self.nodes.max()['x_coord'] + 1
+            ymax = self.nodes.max()['y_coord'] + 1
+
+            plt.axis('on') # turns on axis
+            ax.set(xlim=(xmin, xmax), ylim=(ymin, ymax))
+            ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+            plt.legend(loc='lower right')
+
+            plt.show()
+
+
         return
 
     ################################           DATASET        ###################################### 
@@ -259,7 +351,6 @@ class VRP:
             y_j = self.nodes.get('y_coord')[j]
             self.c[(i, j)] = self.calc_distance((x_i, y_i), (x_j, y_j))
         return
-
 
 
 
@@ -378,7 +469,7 @@ class VRP:
         return nb_customers, truck_capacity, N, V, demands, nodes
 
 
-    ################################           OPTIMIZATION        ################################# 
+    ################################      OPTIMIZATION  MODEL      ################################# 
     ################################################################################################
     def setup(self):
 
@@ -412,6 +503,9 @@ class VRP:
                             ) 
                         for i in self.V[:-1] 
                     ) <= self.Q )
+
+        else:
+            pass
 
         self.model.update()
 
@@ -484,6 +578,8 @@ class VRP:
 
         return
 
+
+
     def add_model_vars_dfj(self):
             self.model._x = self.x # User made variables get passed along with underscore VarName
             self.model._A = self.A
@@ -499,12 +595,26 @@ class VRP:
             self.add_model_vars_dfj()
             self.model.Params.lazyConstraints = 1
             self.model.optimize(self.subtourelim)
+        elif self.subtour_type == '':
+            if input("no subtour type chosen, continue?: ") in ['y', 'yes']:
+                self.model.optimize()
 
-        save_result = input("Save optimized result?:")
-        if save_result.lower() in ['y', 'yes']:
+        if input("Save optimized result?:").lower() in ['y', 'yes']:
             self.model.write("out.sol")
 
         return
+
+
+    def find_active_arcs(self):
+
+        active_arcs = []
+
+        for i,j in self.A:
+            for k in self.K:
+                if round(self.x[i,j,k].x) == 1:
+                    active_arcs.append([i,j,k])
+
+        self.active_arcs = np.vstack(active_arcs)
 
     @staticmethod
     def subtourelim(mdl,where):
