@@ -1,10 +1,19 @@
 import numpy as np
 import pandas as pd
+import networkx as nx
 import matplotlib.pyplot as plt
+
 import itertools
 import sys
+import os
+
 from collections import Counter
-from gurobipy import Model, GRB, quicksum
+from matplotlib.markers import MarkerStyle
+from gurobipy import Model, GRB, quicksum, LinExpr
+
+
+import time
+
 
 
 class VRP:
@@ -53,6 +62,8 @@ class VRP:
         self.subtour_type = 'DFJ'  # DFJ or MTZ
         self.gap_goal = 0.
         self.M = None
+
+        self.random_data_n_model_p = "random_datasets"
 
     def setup_random_data(self,
                           number_of_customers,
@@ -107,6 +118,7 @@ class VRP:
         self.read_input_cvrp(file_name)
         self.Q = truck_capacity
         self.n = nb_customers + 1
+
         self.number_of_customers = nb_customers
         self.K = np.arange(1, number_of_vehicles + 1)
 
@@ -119,7 +131,151 @@ class VRP:
 
         self.create_arcs()
 
-    def visualize(self):
+    def visualize(self,plot_sol='y'):
+
+        cmap = plt.cm.get_cmap('hsv', len(self.K) + 1)
+        fig, ax = plt.subplots(1, 1,figsize=(10,8))  # a figure with a 1x1 grid of Axes
+
+
+        if plot_sol in ['y', 'yes']:
+
+            plt.title( 'Vehicle Routing Problem solution (n={}, k={})'.format(self.n,len(self.K)) )
+
+            self.find_active_arcs()
+            tours = self.subtour(self.K, self.active_arcs)
+
+            for k in tours.keys():
+                vehicle_color = cmap(k-1)[0:3]
+                vehicle_arcs = tours[k]
+
+                ax.scatter([],[], c=cmap(k-1), label='k='+str(k) )
+
+                G = nx.DiGraph()
+                for tour in vehicle_arcs:
+                    idx = 0
+                    for node in tour:
+                        node_pos = (self.nodes.iloc[node][0],self.nodes.iloc[node][1])
+                        G.add_node(node,pos=node_pos)
+
+                        if idx < len(tour)-1:
+                            node_i = tour[idx]
+                            node_j = tour[idx+1]
+                            edge_cost = round(self.c[(node_i,node_j)],2)
+                            G.add_edge( node_i, node_j, weight=edge_cost )
+                            idx += 1
+
+                    node_pos = nx.get_node_attributes(G,'pos')
+                    weights = nx.get_edge_attributes(G,'weight')
+
+                    nx.draw(G,node_pos,ax=ax, node_size=400, node_color='w', edgecolors=vehicle_color, edge_color= vehicle_color )
+                    nx.draw_networkx_edge_labels(G, node_pos, ax=ax, edge_labels=weights)
+
+                    for node in node_pos.keys():
+                        pos = node_pos[node]
+
+                        if node == self.V[0]:
+                            offset = -0.1
+                            comma_on = ','
+                        elif node == self.V[-1]:
+                            offset = 0.1
+                            comma_on = ''
+                        else:
+                            offset = 0
+                            comma_on=''
+
+                        ax.text(pos[0] + offset, pos[1], s=str(node)+comma_on, horizontalalignment='center',verticalalignment='center')
+
+
+            # Recolor depot node to black
+            G = nx.DiGraph()
+            pos = (self.nodes.iloc[0][0],self.nodes.iloc[0][1])
+            G.add_node(0,pos=pos)
+            node_pos = nx.get_node_attributes(G,'pos')
+            nx.draw_networkx_nodes(G,node_pos,ax=ax, node_size=400, node_shape='D',node_color='w', edgecolors='b')
+
+            # Add axes
+            xmin = self.nodes.min()['x_coord'] - 1
+            ymin = self.nodes.min()['y_coord'] - 1
+
+            xmax = self.nodes.max()['x_coord'] + 1
+            ymax = self.nodes.max()['y_coord'] + 1
+
+            plt.axis('on') # turns on axis
+            ax.set(xlim=(xmin, xmax), ylim=(ymin, ymax))
+            ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+            plt.legend(loc='lower right')
+
+            print("Subtours")
+            print(tours)
+
+            plt.tight_layout()
+
+            plt.show()
+
+
+        elif plot_sol == 'n':
+            plt.title('Vehicle Routing Problem scenario (n={}, k={})'.format(self.n,len(self.K)))
+
+            G = nx.Graph()
+
+            for node in self.V:
+                node_pos = (self.nodes.iloc[node][0],self.nodes.iloc[node][1])
+                G.add_node(node,pos=node_pos)
+
+            for edge in self.c.keys():
+                if edge != (self.V[0],self.V[-1]) and edge[1] != self.V[-1]:
+                    G.add_edge(edge[0],edge[1],weight=round(self.c[edge],2))
+
+            node_pos = nx.get_node_attributes(G, 'pos')
+            weights = nx.get_edge_attributes(G , 'weight')
+
+            offset = 0
+            nx.draw(G, node_pos, ax=ax, node_color='w', edgecolors='k')
+
+            comma_on=''
+
+            for node in node_pos.keys():
+                pos = node_pos[node]
+
+                if node == self.V[0]:
+                    offset = -0.1
+                    comma_on = ','
+                elif node == self.V[-1]:
+                    offset = 0.1
+                else:
+                    offset = 0
+                    comma_on=''
+                ax.annotate(str(node)+comma_on, xy= (pos[0], pos[1]),xytext= (pos[0] + offset, pos[1]) ,horizontalalignment='center',verticalalignment='center')
+
+            nx.draw_networkx_edge_labels(G,node_pos,edge_labels=weights)
+
+            # Recolor depot node to red
+            G = nx.DiGraph()
+            pos = (self.nodes.iloc[0][0],self.nodes.iloc[0][1])
+            G.add_node(0,pos=pos)
+            node_pos = nx.get_node_attributes(G,'pos')
+            nx.draw_networkx_nodes(G,node_pos,ax=ax, node_size=400, node_shape='D',node_color='w', edgecolors='b')
+
+            # Add axes
+            xmin = self.nodes.min()['x_coord'] - 1
+            ymin = self.nodes.min()['y_coord'] - 1
+
+            xmax = self.nodes.max()['x_coord'] + 1
+            ymax = self.nodes.max()['y_coord'] + 1
+
+            plt.axis('on') # turns on axis
+            ax.set(xlim=(xmin, xmax), ylim=(ymin, ymax))
+            ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
+            plt.legend(loc='lower right')
+
+            plt.tight_layout()
+
+            plt.show()
+
+
+        return
+
+    def visualize2(self):
         plt.title('Capacitated Vehicle Routing Problem')
 
         cmap = plt.cm.get_cmap('hsv', len(self.K) + 1)
@@ -154,7 +310,6 @@ class VRP:
         plt.legend(loc='lower right')
         plt.show()
         return
-
     ################################           DATASET        ######################################
     ################################################################################################
 
@@ -172,7 +327,8 @@ class VRP:
         :param p2: 1D iterable of size of 2
         :return: Distance (float)
         """
-        dist = (((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5)
+        dist = np.linalg.norm( np.subtract(p1, p2) ) # Euclidian distance
+        # dist = (((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2) ** 0.5)
         return dist
 
     def generate_node_table(self, file_name="nodes.csv"):
@@ -180,13 +336,20 @@ class VRP:
         nodes_coord_y = np.random.rand(self.n + 1) * self.y_range
         nodes_table = pd.DataFrame(np.transpose(np.array([nodes_coord_x, nodes_coord_y])),
                                    columns=['x_coord', 'y_coord'])
-        nodes_table.to_csv(file_name)
+
+        if file_name == "nodes.csv":
+            file_name = "n{}k{}_nodes.csv".format( self.n,len(self.K) )
+
+        nodes_table.to_csv( os.path.join(self.random_data_n_model_p,file_name) )
         self.nodes = nodes_table
 
         return nodes_table
 
     def read_node_table(self, file_name="nodes.csv"):
-        nodes_table = pd.read_csv(file_name)
+        if file_name == "nodes.csv":
+            file_name = "n{}k{}_nodes.csv".format(self.n,self.k)
+
+        nodes_table = pd.read_csv( os.path.join(self.random_data_n_model_p,file_name) )
         self.nodes = nodes_table
         return nodes_table
 
@@ -196,6 +359,7 @@ class VRP:
         :return:
         """
         random_selection = list(self.nodes.sample(n=self.n + 1).index)
+
         # Select the depot node
         # Depot node is randomly selected
         start_depot_idx = random_selection.pop(np.random.randint(0, len(random_selection) - 1, size=1)[0])
@@ -218,12 +382,7 @@ class VRP:
         self.N = np.arange(1, self.n + 1)
         self.V = np.hstack((0, self.N, self.n + 1))
 
-        # self.N = random_selection  # The rest will be the customer nodes
-        # temp_list = self.N[:]
-        # temp_list.insert(0, start_depot_idx)
-        # temp_list.append(end_depot_idx)
-        # # self.V[0] is the start depot, and self.V[-1] is the end depot
-        # self.V = temp_list[:]
+        print(self.nodes)
 
         # Assign the customer demand to each customer
         self.q = {}
@@ -233,19 +392,6 @@ class VRP:
         assert sum(self.q.values()) <= self.Q * len(self.K), f"The total customer demand {sum(self.q.values())} " \
                                                              f"exceeds the total vehicle capacity: " \
                                                              f"{self.Q * len(self.K)} = {self.Q} * {len(self.K)}."
-
-        # self.Q = sum(self.q.values()) // len(self.K) + 1  # ensure that the demand can always be fulfilled
-
-        if self.subtour_type is "TW":
-            # Assign time windows to each customer
-            self.e = {}
-            self.l = {}
-            self.p = {}
-            for i in self.N:
-                self.e[i] = np.random.randint(self.opening_time, self.closing_time - self.time_window)
-                self.l[i] = self.e[i] + self.time_window
-                self.p[i] = self.processing_time
-
         return
 
     def create_arcs(self):
@@ -272,7 +418,12 @@ class VRP:
         duplicates = [(k, v) for k, v in Counter(self.A).items() if v > 1]
         assert len(duplicates) == 0, f"Duplicate arc found: {duplicates}"
 
-        # self.A = [(i, j) for i in self.V for j in self.V if i != j]  # arcs between nodes and vehicle k
+        # sort all the arcs
+        A = np.array(self.A)
+
+        sort_ = np.lexsort((A[:,1],A[:,0]),axis=0)
+
+        self.A = A[sort_]
 
         # The cost to travel an arc equals its length
         self.c = {}
@@ -539,29 +690,38 @@ class VRP:
                                      quicksum(self.x[i, j, k] for j in self.V[1:] if j != i),  # Must leave from i
                                      name=f"Leave_{i}_{k}")
 
-        # Capacity constraint
-        for k in self.K:
-            self.model.addConstr(
-                quicksum(self.q[j] * self.x[i, j, k] for i in self.V[:-1] for j in self.V[1:-1] if i != j) <= self.Q,
-                name=f"Capacity_{k}")
+        # # Capacity constraint
+        # for k in self.K:
+        #     self.model.addConstr(
+        #         quicksum(self.q[j] * self.x[i, j, k] for i in self.V[:-1] for j in self.V[1:-1] if i != j) <= self.Q,
+        #         name=f"Capacity_{k}")
 
         return
+
+
+
+    def add_model_vars_dfj(self):
+            self.model._x = self.x # User made variables get passed along with underscore VarName
+            self.model._A = self.A
+            self.model._K = self.K
+            self.model._V = self.V
+            self.model._subtour = self.subtour
 
     def optimize(self):
 
         if self.subtour_type == 'MTZ':
             self.model.optimize()
         elif self.subtour_type == 'DFJ':
+            self.add_model_vars_dfj()
             self.model.Params.lazyConstraints = 1
-            self.model._x = self.x  # User made variables get passed along with underscore VarName
-            self.model._A = self.A
-            self.model._K = self.K
-            self.model._V = self.V
-            self.model._subtour = self.subtour
             self.model.optimize(self.subtourelim)
+        elif self.subtour_type == '':
+            if input("no subtour type chosen, continue?: ") in ['y', 'yes']:
+                self.model.optimize()
         elif self.subtour_type == "TW":
             self.model.optimize()
 
+        # The section below can be used to debug infeasibility
         if self.model.status == GRB.OPTIMAL:
             print(f"Optimal objective: {self.model.objVal}")
         elif self.model.status == GRB.INF_OR_UNBD:
@@ -579,17 +739,30 @@ class VRP:
             print(f"Optimization ended with status {self.model.status}")
             sys.exit(0)
 
-        save_result = input("Save optimized result?:")
-        if save_result.lower() in ['y', 'yes']:
-            self.model.write("out.sol")
+        if input("Save optimized result?:").lower() in ['y', 'yes']:
+            solution_name = "n{}k{}.sol".format(self.n,len(self.K))
+            self.model.write( os.path.join("solutions",solution_name))
 
         return
+
+
+    def find_active_arcs(self):
+
+        active_arcs = []
+
+        for i,j in self.A:
+            for k in self.K:
+                if round(self.x[i,j,k].x) == 1:
+                    active_arcs.append([i,j,k])
+
+        self.active_arcs = np.vstack(active_arcs)
 
     @staticmethod
     def subtourelim(mdl,where):
         if where == GRB.callback.MIPSOL:
             active_arcs = []
             solutions = mdl.cbGetSolution(mdl._x)
+
             for i, j in mdl._A:
                 for k in mdl._K:
                     if round(solutions[i, j, k]) == 1:
@@ -604,38 +777,22 @@ class VRP:
                 if len(tours[k]) > 1:
                     for tour in tours[k]:
                         S = np.unique(tour)
-                        # print(S)
-                        expr = quicksum(mdl._x[i, j, k] for i in S for j in S if j != i if i != mdl._V[-1] if j != mdl._V[0])
+                        expr = LinExpr()
+
+                        for i in S:
+                            if i != mdl._V[-1]:
+                                for j in S:
+                                    if j != i and j != mdl._V[0]:
+                                            expr += mdl._x[i, j, k]
+
+                        # expr = quicksum(mdl._x[i, j, k] for i in S for j in S if j != i if i != mdl._V[-1] or j != mdl._V[0])
                         mdl.cbLazy(expr <= len(S) - 1)
 
-    # @staticmethod
-    # def subtourelim(mdl, where):
-    #     if where == GRB.callback.MIPSOL:
-    #
-    #         active_arcs = []
-    #         # TODO: look into self._vars, self.cbGetSolution
-    #         for i, j in mdl._A:
-    #             for k in mdl._K:
-    #                 solutions = mdl.cbGetSolution(mdl._x)
-    #                 if solutions[i, j, k] > 0.99:
-    #                     active_arcs.append([i, j, k])
-    #
-    #         active_arcs = np.vstack(active_arcs)
-    #
-    #         tours = mdl._subtour(mdl, active_arcs)
-    #
-    #         for k in tours.keys():
-    #             if len(tours[k]) > 1:
-    #                 for tour in tours[k]:
-    #                     S = np.unique(tour)
-    #                     expr = quicksum(mdl._x[i, j, k] for i in S for j in S if j != i)
-    #                     mdl.cbLazy(expr <= len(S) - 1)
-
     @staticmethod
-    def subtour(mdl, active_arcs):
+    def subtour(K, active_arcs):
         tours = {}
 
-        for k in mdl._K:
+        for k in K:
             vehicle_tours = []
             vehicle_arcs = active_arcs[np.where(active_arcs[:, 2] == k)][:, 0:2]
             start_node, finish_node = vehicle_arcs[0]
