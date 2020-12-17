@@ -69,8 +69,8 @@ class VRP:
                           number_of_customers,
                           number_of_vehicles,
                           vehicle_capacity=5,
-                          x_range=10, y_range=10,
-                          demand_lower=1, demand_higher=2,
+                          x_range=20, y_range=20,
+                          demand_lower=1, demand_higher=10,
                           seed=420):
 
         """
@@ -275,41 +275,6 @@ class VRP:
 
         return
 
-    def visualize2(self):
-        plt.title('Capacitated Vehicle Routing Problem')
-
-        cmap = plt.cm.get_cmap('hsv', len(self.K) + 1)
-
-        plt.plot(np.array(self.nodes.iloc[self.V[0]])[0], np.array(self.nodes.iloc[self.V[0]])[1], marker='*',
-                 markersize=20, label='Depot', c='r', )
-        plt.scatter(np.array(self.nodes.iloc[self.N])[:, 0],
-                    np.array(self.nodes.iloc[self.N])[:, 1], c='b', label='Customer')
-        # plt.annotate([self.V[0], self.V[-1]], (self.nodes.iloc[self.V[0]][0], self.nodes.iloc[self.V[0]][1]),
-        #              xytext=(20, -20), textcoords='offset points', ha='right', va='bottom')
-        for idx in self.V[1:-1]:
-            plt.annotate(idx, (self.nodes.iloc[idx][0], self.nodes.iloc[idx][1]),
-                         xytext=(5, 2), textcoords='offset points', ha='right', va='bottom')
-        travel_paths = {}
-        times = {}
-
-        for k in self.K:
-            travel_paths[k] = []
-            for (i, j) in self.A:
-                # Using the round function, in case truncation leads to something like 0.9999
-                if round(self.x[i, j, k].x) == 1:
-                    travel_paths[k].append((i, j))
-
-                    plt.plot([self.nodes.iloc[i][0], self.nodes.iloc[j][0]],
-                             [self.nodes.iloc[i][1], self.nodes.iloc[j][1]], c=cmap(k), zorder=0)
-                    if (i, j) != (self.V[0], self.V[-1]) and (i, j) != (self.V[-1], self.V[0]):
-                        plt.annotate(round(self.c[(i, j)], 2),
-                                     ((self.nodes.iloc[i][0] + self.nodes.iloc[j][0]) / 2,
-                                      (self.nodes.iloc[i][1] + self.nodes.iloc[j][1]) / 2),
-                                     xytext=(20, 2), textcoords='offset points', ha='right', va='bottom')
-        print(travel_paths)
-        plt.legend(loc='lower right')
-        plt.show()
-        return
     ################################           DATASET        ######################################
     ################################################################################################
 
@@ -392,6 +357,16 @@ class VRP:
         assert sum(self.q.values()) <= self.Q * len(self.K), f"The total customer demand {sum(self.q.values())} " \
                                                              f"exceeds the total vehicle capacity: " \
                                                              f"{self.Q * len(self.K)} = {self.Q} * {len(self.K)}."
+
+        # Assign time windows to each customer
+        if self.subtour_type is "TW":
+            self.e = {}
+            self.l = {}
+            self.p = {}
+            for i in self.N:
+                self.e[i] = np.random.randint(self.opening_time, self.closing_time - self.time_window)
+                self.l[i] = self.e[i] + self.time_window
+                self.p[i] = self.processing_time
         return
 
     def create_arcs(self):
