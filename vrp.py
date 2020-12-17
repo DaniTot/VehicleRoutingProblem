@@ -586,27 +586,50 @@ class VRP:
         return
 
     @staticmethod
-    def subtourelim(mdl, where):
+    def subtourelim(mdl,where):
         if where == GRB.callback.MIPSOL:
-
             active_arcs = []
-            # TODO: look into self._vars, self.cbGetSolution
+            solutions = mdl.cbGetSolution(mdl._x)
             for i, j in mdl._A:
                 for k in mdl._K:
-                    solutions = mdl.cbGetSolution(mdl._x)
-                    if solutions[i, j, k] > 0.99:
+                    if round(solutions[i, j, k]) == 1:
                         active_arcs.append([i, j, k])
 
             active_arcs = np.vstack(active_arcs)
 
-            tours = mdl._subtour(mdl, active_arcs)
+            tours = mdl._subtour(mdl._K, active_arcs)
 
+            # add lazy constraints
             for k in tours.keys():
                 if len(tours[k]) > 1:
                     for tour in tours[k]:
                         S = np.unique(tour)
-                        expr = quicksum(mdl._x[i, j, k] for i in S for j in S if j != i)
+                        # print(S)
+                        expr = quicksum(mdl._x[i, j, k] for i in S for j in S if j != i if i != mdl._V[-1] if j != mdl._V[0])
                         mdl.cbLazy(expr <= len(S) - 1)
+
+    # @staticmethod
+    # def subtourelim(mdl, where):
+    #     if where == GRB.callback.MIPSOL:
+    #
+    #         active_arcs = []
+    #         # TODO: look into self._vars, self.cbGetSolution
+    #         for i, j in mdl._A:
+    #             for k in mdl._K:
+    #                 solutions = mdl.cbGetSolution(mdl._x)
+    #                 if solutions[i, j, k] > 0.99:
+    #                     active_arcs.append([i, j, k])
+    #
+    #         active_arcs = np.vstack(active_arcs)
+    #
+    #         tours = mdl._subtour(mdl, active_arcs)
+    #
+    #         for k in tours.keys():
+    #             if len(tours[k]) > 1:
+    #                 for tour in tours[k]:
+    #                     S = np.unique(tour)
+    #                     expr = quicksum(mdl._x[i, j, k] for i in S for j in S if j != i)
+    #                     mdl.cbLazy(expr <= len(S) - 1)
 
     @staticmethod
     def subtour(mdl, active_arcs):
