@@ -1,8 +1,10 @@
 import numpy as np
 import pandas as pd
 import networkx as nx
-import itertools
 import matplotlib.pyplot as plt
+
+import itertools
+import os
 
 
 from collections import Counter
@@ -48,6 +50,8 @@ class VRP:
 
         self.subtour_type = 'DFJ'  # DFJ or MTZ
         self.gap_goal = 0.1
+
+        self.random_data_n_model_p = "random_datasets"
 
     def setup_random_data(self,
                           number_of_customers,
@@ -264,13 +268,21 @@ class VRP:
         nodes_coord_y = np.random.rand(self.n + 1) * self.y_range
         nodes_table = pd.DataFrame(np.transpose(np.array([nodes_coord_x, nodes_coord_y])),
                                    columns=['x_coord', 'y_coord'])
-        nodes_table.to_csv(file_name)
+
+
+        if file_name == "nodes.csv":
+            file_name = "n{}k{}_nodes.csv".format( self.n,len(self.K) ) 
+            
+        nodes_table.to_csv( os.path.join(self.random_data_n_model_p,file_name) )
         self.nodes = nodes_table
 
         return nodes_table
 
     def read_node_table(self, file_name="nodes.csv"):
-        nodes_table = pd.read_csv(file_name)
+        if file_name == "nodes.csv":
+            file_name = "n{}k{}_nodes.csv".format(self.n,self.k)
+
+        nodes_table = pd.read_csv( os.path.join(self.random_data_n_model_p,file_name) )
         self.nodes = nodes_table
         return nodes_table
 
@@ -513,7 +525,9 @@ class VRP:
         self.model.setParam("MIPGap", self.gap_goal)
         self.model.update()
 
-        self.model.write("model.lp")
+        mdl_name = "n{}k{}.lp".format(self.n, len(self.K) )
+
+        self.model.write( os.path.join("models",mdl_name) )
 
         return
 
@@ -600,7 +614,8 @@ class VRP:
                 self.model.optimize()
 
         if input("Save optimized result?:").lower() in ['y', 'yes']:
-            self.model.write("out.sol")
+            solution_name = "n{}k{}.sol".format(self.n,len(self.K))
+            self.model.write( os.path.join("solutions",solution_name))
 
         return
 
