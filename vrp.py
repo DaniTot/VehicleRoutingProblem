@@ -171,18 +171,21 @@ class VRP:
                     nx.draw_networkx_edge_labels(G, node_pos, ax=ax, edge_labels=weights)
 
                     for node in node_pos.keys():
-                        pos = node_pos[node]
+                        pos = node_pos[node]   
 
                         if node == self.V[0]:
-                            offset = -0.1
-                            comma_on = ','
+                            offset = -0.06
+                            comma_on = ', '
                         elif node == self.V[-1]:
-                            offset = 0.1
+                            if self.V[-1] >= 10:
+                                offset = 0.08
+                            else:
+                                offset = 0.06
                             comma_on = ''
                         else:
                             offset = 0
                             comma_on=''
-
+                        
                         ax.text(pos[0] + offset, pos[1], s=str(node)+comma_on, horizontalalignment='center',verticalalignment='center')
 
 
@@ -205,11 +208,14 @@ class VRP:
             ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
             plt.legend(loc='lower right')
 
+            print("------------------------------------ SOLUTION ------------------------------------")
             print("Subtours")
             print(tours)
+            print("Total vehicle capacity", len(self.K)*self.Q)
+            print("Total demand", sum(self.q.values())  )
+            print("Objective Value: ", self.model.objVal)
 
             plt.tight_layout()
-
             plt.show()
 
 
@@ -235,17 +241,22 @@ class VRP:
             comma_on=''
 
             for node in node_pos.keys():
-                pos = node_pos[node]
+                pos = node_pos[node]   
 
                 if node == self.V[0]:
-                    offset = -0.1
-                    comma_on = ','
+                    offset = -0.06
+                    comma_on = ', '
                 elif node == self.V[-1]:
-                    offset = 0.1
+                    if self.V[-1] >= 10:
+                        offset = 0.08
+                    else:
+                        offset = 0.06
+                    comma_on = ''
                 else:
                     offset = 0
                     comma_on=''
-                ax.annotate(str(node)+comma_on, xy= (pos[0], pos[1]),xytext= (pos[0] + offset, pos[1]) ,horizontalalignment='center',verticalalignment='center')
+                
+                ax.text(pos[0] + offset, pos[1], s=str(node)+comma_on, horizontalalignment='center',verticalalignment='center')
 
             nx.draw_networkx_edge_labels(G,node_pos,edge_labels=weights)
 
@@ -305,7 +316,7 @@ class VRP:
         if file_name == "nodes.csv":
             file_name = "n{}k{}_nodes.csv".format( self.n,len(self.K) )
 
-        nodes_table.to_csv( os.path.join(self.random_data_n_model_p,file_name) )
+        nodes_table.to_csv( os.path.join(self.random_data_n_model_p,file_name),index=False )
         self.nodes = nodes_table
 
         return nodes_table
@@ -359,7 +370,7 @@ class VRP:
                                                              f"{self.Q * len(self.K)} = {self.Q} * {len(self.K)}."
 
         # Assign time windows to each customer
-        if self.subtour_type is "TW":
+        if self.subtour_type == "TW":
             self.e = {}
             self.l = {}
             self.p = {}
@@ -534,13 +545,6 @@ class VRP:
 
         self.model.update()
 
-        # # TODO: Sub-tour elimination via Miller-Tucker-Zemlin formulation
-        # for k in self.K:
-        #     for i, j in self.A:
-        #         if i not in (self.V[0], self.V[-1]) and j not in (self.V[0], self.V[-1]):
-        #             self.model.addConstr(self.u[j, k] - self.u[i, k] >= self.q[j] - self.Q * (1 - self.x[i, j, k]),
-        #                                  name=f"Subtour_{i}_{j}_{k}")
-
         # Subtour elimination constraint (miller-tucker-zemlin)
         #
         # $$u_{j} - u_{i} \geq q_{j} - Q(1-x_{ijk}), i,j = \{1,....,n\}, i \neq j$$
@@ -575,7 +579,10 @@ class VRP:
         self.model.setParam("MIPGap", self.gap_goal)
         self.model.update()
 
-        self.model.write("model.lp")
+
+        model_name = "n{}k{}_{}.lp".format( self.n,len(self.K),self.subtour_type )
+
+        self.model.write( os.path.join("models",model_name) )
 
     def CVRPTW_setup(self):
         """
@@ -611,8 +618,9 @@ class VRP:
         self.model.setParam("MIPGap", self.gap_goal)
         self.model.update()
 
-        self.model.write("model.lp")
+        model_name = "n{}k{}_{}_TW.lp".format( self.n,len(self.K),self.subtour_type )
 
+        self.model.write( os.path.join("models",model_name) )
     def general_setup(self):
         """
         Basic model elements shared by both CVRP and CVRPTW
@@ -627,10 +635,12 @@ class VRP:
             for k in self.K:
                 self.x[i, j, k] = self.model.addVar(lb=0, ub=1, vtype=GRB.BINARY, name=f"x[{i},{j},{k}]")
 
-        self.u = {}
-        for j in self.N:
-            for k in self.K:
-                self.u[j, k] = self.model.addVar(vtype=GRB.CONTINUOUS, name=f"u[{j},{k}]")
+
+        if self.subtour_type == 'MTZ':
+            self.u = {}
+            for j in self.N:
+                for k in self.K:
+                    self.u[j, k] = self.model.addVar(vtype=GRB.CONTINUOUS, name=f"u[{j},{k}]")
 
         # Objective function
         # explanation for self.V[:-1] = [0, 1, ..., n]
@@ -712,10 +722,9 @@ class VRP:
             sys.exit(0)
         else:
             print(f"Optimization ended with status {self.model.status}")
-            sys.exit(0)
 
         if input("Save optimized result?:").lower() in ['y', 'yes']:
-            solution_name = "n{}k{}.sol".format(self.n,len(self.K))
+            solution_name = "n{}k{}_{}.sol".format(self.n,len(self.K),self.subtour_type)
             self.model.write( os.path.join("solutions",solution_name))
 
         return
