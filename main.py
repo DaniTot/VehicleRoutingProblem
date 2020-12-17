@@ -4,7 +4,7 @@ vrp = VRP()
 
 random = True
 
-n = 4  # number of customers
+n = 5  # number of customers
 k = 1  # number of vehicles
 
 Q = 32
@@ -15,7 +15,7 @@ if random:
     vrp.setup_random_data(number_of_customers=n,
                           number_of_vehicles=k,
                           vehicle_capacity=Q,
-                          x_range=10, y_range=5,
+                          x_range=20, y_range=20,
                           demand_lower=1, demand_higher=10,
                           seed=420)
 else:
@@ -27,7 +27,7 @@ if plot_all_nodes == True:
     vrp.visualize(plot_sol='n')
 
 vrp.gap_goal = 0.1
-vrp.subtour_type = 'DFJ'
+vrp.subtour_type = ''
 vrp.setup()
 vrp.optimize()
 vrp.visualize()

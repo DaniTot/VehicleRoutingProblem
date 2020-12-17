@@ -122,12 +122,12 @@ class VRP:
     def visualize(self,plot_sol='y'):
 
         cmap = plt.cm.get_cmap('hsv', len(self.K) + 1)
-        fig, ax = plt.subplots(1, 1)  # a figure with a 1x1 grid of Axes
+        fig, ax = plt.subplots(1, 1,figsize=(10,8))  # a figure with a 1x1 grid of Axes
 
         
         if plot_sol in ['y', 'yes']:
 
-            plt.title('Capacitated Vehicle Routing Problem')
+            plt.title( 'Vehicle Routing Problem solution (n={}, k={})'.format(self.n,len(self.K)) )
 
             self.find_active_arcs()
             tours = self.subtour(self.K, self.active_arcs)
@@ -135,6 +135,9 @@ class VRP:
             for k in tours.keys():
                 vehicle_color = cmap(k-1)[0:3]
                 vehicle_arcs = tours[k]
+
+                ax.scatter([],[], c=cmap(k-1), label='k='+str(k) )
+
                 G = nx.DiGraph()
                 for tour in vehicle_arcs:
                     idx = 0
@@ -155,8 +158,6 @@ class VRP:
                     nx.draw(G,node_pos,ax=ax, node_size=400, node_color='w', edgecolors=vehicle_color, edge_color= vehicle_color )
                     nx.draw_networkx_edge_labels(G, node_pos, ax=ax, edge_labels=weights)      
                     
-                    ax.scatter([],[], c=cmap(k-1), label='k='+str(k) )
-
                     for node in node_pos.keys():
                         pos = node_pos[node]   
 
@@ -165,9 +166,11 @@ class VRP:
                             comma_on = ','
                         elif node == self.V[-1]:
                             offset = 0.1
+                            comma_on = ''
                         else:
                             offset = 0
                             comma_on=''
+                        
                         ax.text(pos[0] + offset, pos[1], s=str(node)+comma_on, horizontalalignment='center',verticalalignment='center')
 
 
@@ -176,7 +179,7 @@ class VRP:
             pos = (self.nodes.iloc[0][0],self.nodes.iloc[0][1])
             G.add_node(0,pos=pos)
             node_pos = nx.get_node_attributes(G,'pos')
-            nx.draw_networkx_nodes(G,node_pos,ax=ax, node_size=400, node_color='w', edgecolors='k')
+            nx.draw_networkx_nodes(G,node_pos,ax=ax, node_size=400, node_shape='D',node_color='w', edgecolors='b')
 
             # Add axes
             xmin = self.nodes.min()['x_coord'] - 1
@@ -193,11 +196,13 @@ class VRP:
             print("Subtours")
             print(tours)
 
+            plt.tight_layout()
+
             plt.show()     
 
 
         elif plot_sol == 'n':
-            plt.title('Capacitated Vehicle Routing Problem')
+            plt.title('Vehicle Routing Problem scenario (n={}, k={})'.format(self.n,len(self.K)))
 
             G = nx.Graph()
 
@@ -215,6 +220,8 @@ class VRP:
             offset = 0
             nx.draw(G, node_pos, ax=ax, node_color='w', edgecolors='k')
 
+            comma_on=''
+
             for node in node_pos.keys():
                 pos = node_pos[node]   
 
@@ -226,10 +233,16 @@ class VRP:
                 else:
                     offset = 0
                     comma_on=''
-                ax.text(pos[0] + offset, pos[1], s=str(node)+comma_on, horizontalalignment='center',verticalalignment='center')
+                ax.annotate(str(node)+comma_on, xy= (pos[0], pos[1]),xytext= (pos[0] + offset, pos[1]) ,horizontalalignment='center',verticalalignment='center')
 
             nx.draw_networkx_edge_labels(G,node_pos,edge_labels=weights)
 
+            # Recolor depot node to red
+            G = nx.DiGraph()
+            pos = (self.nodes.iloc[0][0],self.nodes.iloc[0][1])
+            G.add_node(0,pos=pos)
+            node_pos = nx.get_node_attributes(G,'pos')
+            nx.draw_networkx_nodes(G,node_pos,ax=ax, node_size=400, node_shape='D',node_color='w', edgecolors='b')
 
             # Add axes
             xmin = self.nodes.min()['x_coord'] - 1
@@ -243,6 +256,8 @@ class VRP:
             ax.tick_params(left=True, bottom=True, labelleft=True, labelbottom=True)
             plt.legend(loc='lower right')
 
+            plt.tight_layout()
+            
             plt.show()
 
 
