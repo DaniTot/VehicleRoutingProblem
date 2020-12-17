@@ -133,7 +133,9 @@ class VRP:
 
     def visualize(self,plot_sol='y'):
 
-        cmap = plt.cm.get_cmap('hsv', len(self.K) + 1)
+
+        cmap  = ['tab:blue','tab:orange','tab:green', 'tab:red','tab:purple','tab:brown','tab:pink','tab:gray','tab:olive','tab:cyan']
+
         fig, ax = plt.subplots(1, 1,figsize=(10,8))  # a figure with a 1x1 grid of Axes
 
 
@@ -145,10 +147,11 @@ class VRP:
             tours = self.subtour(self.K, self.active_arcs)
 
             for k in tours.keys():
-                vehicle_color = cmap(k-1)[0:3]
+                vehicle_color = cmap[k-1]
+                print(vehicle_color)
                 vehicle_arcs = tours[k]
 
-                ax.scatter([],[], c=cmap(k-1), label='k='+str(k) )
+                ax.scatter([],[], c=vehicle_color, label='k='+str(k) )
 
                 G = nx.DiGraph()
                 for tour in vehicle_arcs:
@@ -211,8 +214,10 @@ class VRP:
             print("------------------------------------ SOLUTION ------------------------------------")
             print("Subtours")
             print(tours)
-            print("Total vehicle capacity", len(self.K)*self.Q)
-            print("Total demand", sum(self.q.values())  )
+            print("Runtime: ", self.model.Runtime)
+            print("MIPGap: ",  self.model.MIPGap)
+            print("Total vehicle capacity:", len(self.K)*self.Q)
+            print("Total demand:", sum(self.q.values())  )
             print("Objective Value: ", self.model.objVal)
 
             plt.tight_layout()
@@ -370,7 +375,7 @@ class VRP:
                                                              f"{self.Q * len(self.K)} = {self.Q} * {len(self.K)}."
 
         # Assign time windows to each customer
-        if self.subtour_type == "TW":
+        if self.subtour_type == 'TW':
             self.e = {}
             self.l = {}
             self.p = {}
@@ -618,9 +623,10 @@ class VRP:
         self.model.setParam("MIPGap", self.gap_goal)
         self.model.update()
 
-        model_name = "n{}k{}_{}_TW.lp".format( self.n,len(self.K),self.subtour_type )
+        model_name = "n{}k{}_{}.lp".format( self.n,len(self.K),self.subtour_type )
 
         self.model.write( os.path.join("models",model_name) )
+
     def general_setup(self):
         """
         Basic model elements shared by both CVRP and CVRPTW
