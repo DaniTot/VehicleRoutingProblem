@@ -61,6 +61,7 @@ class VRP:
 
         self.subtour_type = 'DFJ'  # DFJ or MTZ
         self.gap_goal = 0.
+        self.time_limit = 60*60
         self.M = None
 
         self.random_data_n_model_p = "random_datasets"
@@ -131,6 +132,16 @@ class VRP:
 
         self.create_arcs()
 
+        # Assign time windows to each customer
+        if self.subtour_type == "TW":
+            self.e = {}
+            self.l = {}
+            self.p = {}
+            for i in self.N:
+                self.e[i] = np.random.randint(self.opening_time, self.closing_time - self.time_window)
+                self.l[i] = self.e[i] + self.time_window
+                self.p[i] = self.processing_time
+
     def visualize(self,plot_sol='y'):
 
 
@@ -174,7 +185,7 @@ class VRP:
                     nx.draw_networkx_edge_labels(G, node_pos, ax=ax, edge_labels=weights)
 
                     for node in node_pos.keys():
-                        pos = node_pos[node]   
+                        pos = node_pos[node]
 
                         if node == self.V[0]:
                             offset = -0.06
@@ -188,7 +199,7 @@ class VRP:
                         else:
                             offset = 0
                             comma_on=''
-                        
+
                         ax.text(pos[0] + offset, pos[1], s=str(node)+comma_on, horizontalalignment='center',verticalalignment='center')
 
 
@@ -221,6 +232,7 @@ class VRP:
             print("Objective Value: ", self.model.objVal)
 
             plt.tight_layout()
+            plt.savefig(f"solutions/n{self.n}k{len(self.K)}_{self.subtour_type}_sol.png")
             plt.show()
 
 
@@ -246,7 +258,7 @@ class VRP:
             comma_on=''
 
             for node in node_pos.keys():
-                pos = node_pos[node]   
+                pos = node_pos[node]
 
                 if node == self.V[0]:
                     offset = -0.06
@@ -260,7 +272,7 @@ class VRP:
                 else:
                     offset = 0
                     comma_on=''
-                
+
                 ax.text(pos[0] + offset, pos[1], s=str(node)+comma_on, horizontalalignment='center',verticalalignment='center')
 
             nx.draw_networkx_edge_labels(G,node_pos,edge_labels=weights)
@@ -285,9 +297,8 @@ class VRP:
             plt.legend(loc='lower right')
 
             plt.tight_layout()
-
+            plt.savefig(f"models/n{self.n}k{len(self.K)}_{self.subtour_type}_nodes.png")
             plt.show()
-
 
         return
 
@@ -440,7 +451,6 @@ class VRP:
 
     # The input files follow the "Augerat" format.
     def read_input_cvrp(self, filename):
-        import sys
         # file_it = iter(self.read_elem(sys.argv[1]))
         file_it = iter(self.read_elem(filename))
 
@@ -608,6 +618,9 @@ class VRP:
                                           vtype=GRB.CONTINUOUS, name=f"t[{i}]")
 
         # Time window constraint
+        print(self.t)
+        print(self.e)
+        print(self.l)
         for i in self.N:
             self.model.addConstr(self.t[i] >= self.e[i], name=f"Lower_time_{i}")
             self.model.addConstr(self.t[i] <= self.l[i], name=f"Upper_time_{i}")
@@ -686,7 +699,7 @@ class VRP:
         #     self.model.addConstr(
         #         quicksum(self.q[j] * self.x[i, j, k] for i in self.V[:-1] for j in self.V[1:-1] if i != j) <= self.Q,
         #         name=f"Capacity_{k}")
-
+        self.model.setParam("TimeLimit", self.time_limit)
         return
 
 
