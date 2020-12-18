@@ -1,0 +1,150 @@
+
+----------Instance- 1
+
+-----DFJ:
+
+{1: [[0, 1, 4, 5, 2, 3, 6]]}
+Runtime:  0.06299972534179688
+MIPGap:  0.0
+Total vehicle capacity: 32
+Total demand: 32
+Objective Value:  40.41035139397551
+
+-----MTZ: 
+
+{1: [[0, 1, 4, 5, 2, 3, 6]]}
+Runtime:  0.061981201171875
+MIPGap:  0.0
+Total vehicle capacity: 32
+Total demand: 32
+Objective Value:  40.41035139397551
+
+
+----------Instance- 2
+
+-----DFJ:
+
+Subtours
+{1: [[0, 3, 2, 5, 4, 1, 6]], 2: [[0, 6]]}
+Runtime:  0.08497428894042969
+MIPGap:  0.0
+Total vehicle capacity: 64
+Total demand: 32
+Objective Value:  40.41035139397552
+
+-----MTZ: 
+
+Subtours
+{1: [[0, 6]], 2: [[0, 3, 2, 5, 4, 1, 6]]}
+Runtime:  0.10200119018554688
+MIPGap:  0.0
+Total vehicle capacity: 64
+Total demand: 32
+Objective Value:  40.41035139397552
+
+
+----------Instance- 3
+
+-----DFJ:
+
+Subtours
+{1: [[0, 1, 4, 3, 6]], 2: [[0, 5, 2, 6]]}
+Runtime:  0.16500091552734375
+MIPGap:  0.0
+Total vehicle capacity: 34
+Total demand: 32
+Objective Value:  69.16488685056137
+
+-----MTZ: 
+
+Subtours
+{1: [[0, 1, 4, 3, 6]], 2: [[0, 2, 5, 6]]}
+Runtime:  0.09900283813476562
+MIPGap:  0.0
+Total vehicle capacity: 34
+Total demand: 32
+Objective Value:  69.16488685056137
+
+----------Instance - 4
+
+-----DFJ:
+Subtours
+{1: [[0, 9, 8, 3, 11]], 2: [[0, 4, 2, 11]], 3: [[0, 6, 7, 11]], 4: [[0, 11]], 5: [[0, 5, 10, 1, 11]]}
+Runtime:  88.24746513366699
+MIPGap:  0.0
+Total vehicle capacity: 50
+Total demand: 38
+Objective Value:  133.28510732892352
+
+
+-----MTZ: 
+
+Subtours
+{1: [[0, 6, 7, 11]], 2: [[0, 11]], 3: [[0, 9, 8, 3, 11]], 4: [[0, 2, 4, 11]], 5: [[0, 5, 10, 1, 11]]}
+Runtime:  10.421998977661133
+MIPGap:  0.0
+Total vehicle capacity: 50
+Total demand: 38
+Objective Value:  133.2851073289235
+
+----------Instance - 5
+
+-----DFJ:
+
+{1: [[0, 16]], 2: [[0, 16]], 3: [[0, 6, 15, 13, 14, 11, 2, 4, 16]], 4: [[0, 3, 12, 8, 10, 5, 9, 7, 1, 16]], 5: [[0, 16]]}   
+Runtime:  3700.877882003784
+MIPGap:  0.10604335418305169
+Total vehicle capacity: 250
+Total demand: 90
+Objective Value:  82.44948397006465
+
+-----MTZ: 
+Subtours
+{1: [[0, 16]], 2: [[0, 3, 12, 8, 10, 5, 9, 7, 1, 16]], 3: [[0, 16]], 4: [[0, 16]], 5: [[0, 4, 2, 11, 14, 13, 15, 6, 16]]}
+Runtime:  581.9741191864014
+MIPGap:  0.09260898807183945
+Total vehicle capacity: 250
+Total demand: 90
+Objective Value:  82.44947036381784
+
+
+
+----------Instance- 6
+
+-----DFJ:
+Subtours
+{1: [[0, 18, 8, 19, 6, 21]], 2: [[0, 17, 21]], 3: [[0, 10, 4, 13, 9, 21]], 4: [[0, 15, 12, 3, 5, 21]], 5: [[0, 1, 16, 7, 14, 20, 11, 2, 21]]}
+Runtime:  3600.0130615234375
+MIPGap:  0.3744652855562198
+Total vehicle capacity: 250
+Total demand: 201
+Objective Value:  123.16394815643505
+
+-----MTZ: 
+Subtours
+{1: [[0, 18, 8, 19, 6, 21]], 2: [[0, 17, 21]], 3: [[0, 2, 11, 20, 14, 7, 16, 1, 21]], 4: [[0, 10, 4, 13, 9, 21]], 5: [[0, 5, 3, 12, 15, 21]]}
+Runtime:  3600.016363143921
+MIPGap:  0.3587847450657361
+Total vehicle capacity: 250
+Total demand: 201
+Objective Value:  123.16394815643507
+
+----------Instance- 7
+
+-----DFJ:
+Subtours
+{1: [[0, 21, 31, 19, 17, 13, 7, 26, 32]], 2: [[0, 18, 8, 9, 22, 15, 29, 10, 25, 5, 20, 32]], 3: [[0, 14, 28, 11, 4, 23, 2, 3, 6, 32]], 4: [[0, 27, 24, 32]], 5: [[0, 30, 16, 1, 12, 32]]}
+Runtime:  3600.0118198394775
+MIPGap:  0.4499633136906479
+Total vehicle capacity: 500
+Total demand: 410
+Objective Value:  787.0818888551103
+
+-----MTZ: 
+Subtours
+{1: [[0, 21, 31, 19, 17, 13, 7, 26, 32]], 2: [[0, 18, 8, 9, 22, 15, 29, 10, 25, 5, 20, 32]], 3: [[0, 14, 28, 11, 4, 23, 2, 3, 6, 32]], 4: [[0, 27, 24, 32]], 5: [[0, 30, 16, 1, 12, 32]]}
+Runtime:  3600.01029586792
+MIPGap:  0.44995997790613096
+Total vehicle capacity: 500
+Total demand: 410
+Objective Value:  787.0818888551103
